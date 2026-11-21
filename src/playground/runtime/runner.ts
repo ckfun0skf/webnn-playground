@@ -73,6 +73,12 @@ export function runPlaygroundSession(
         } catch (error) {
           fail(error instanceof Error ? error : new Error(String(error)));
         }
+      } else if (message.type === "render") {
+        try {
+          options.onRender?.(message.view);
+        } catch (error) {
+          fail(error instanceof Error ? error : new Error(String(error)));
+        }
       } else if (message.type === "finish") {
         if (finishReceived) {
           fail(new Error("Environment called finish() more than once."));
