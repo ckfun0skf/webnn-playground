@@ -352,7 +352,7 @@ function PlaygroundOverview({
   setNetwork: (network: MLPNetwork | null) => void;
 }) {
   const [source, setSource] = useState(DEFAULT_ENVIRONMENT_CODE);
-  const [status, setStatus] = useState<"idle" | "running" | "completed" | "failed">("idle");
+  const [status, setStatus] = useState<"idle" | "running" | "completed" | "failed" | "cancelled">("idle");
   const [result, setResult] = useState<{ fitness: number; metrics?: Record<string, unknown> } | null>(null);
   const [logs, setLogs] = useState<Record<string, unknown>[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -393,7 +393,7 @@ function PlaygroundOverview({
       setStatus("completed");
     } catch (runError) {
       setError(runError instanceof Error ? runError.message : String(runError));
-      setStatus("failed");
+      setStatus(controller.signal.aborted ? "cancelled" : "failed");
     } finally {
       abortRef.current = null;
     }
@@ -439,7 +439,7 @@ function PlaygroundOverview({
           <div className="panel-kicker">SESSION STATUS</div>
           <div className="session-status-line">
             <span className={`status-dot ${status === "completed" ? "good" : status === "failed" ? "warn" : status === "running" ? "good" : "neutral"}`} />
-            <strong>{status === "idle" ? "Ready to run" : status === "running" ? "Running session" : status === "completed" ? "Session completed" : "Session failed"}</strong>
+            <strong>{status === "idle" ? "Ready to run" : status === "running" ? "Running session" : status === "completed" ? "Session completed" : status === "cancelled" ? "Session cancelled" : "Session failed"}</strong>
           </div>
           {status === "running" && <p>Environment code is executing in a dedicated Worker. Network inference is handled by the JavaScript backend.</p>}
           {error && <div className="environment-error">{error}</div>}
