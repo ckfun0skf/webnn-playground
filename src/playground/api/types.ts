@@ -1,5 +1,4 @@
 import type { MLPNetwork } from "../../core/model";
-import type { Predictor } from "../../core/engine";
 
 export interface PlaygroundSessionMetadata {
   sessionId: string;
@@ -44,9 +43,3 @@ export interface RunPlaygroundSessionOptions {
   onReport?: (metrics: Record<string, unknown>) => void;
 }
 
-export interface PlaygroundSessionHandle {
-  result: Promise<PlaygroundSessionResult>;
-  cancel(reason?: string): void;
-}
-
-export type NetworkPredictor = Predictor;
