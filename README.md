@@ -54,4 +54,4 @@ The application must be deployable to GitHub Pages without a backend server. Use
 
 ## Current implementation
 
-The repository now contains the React + TypeScript + Vite workspace shell, an initial MLP model and JavaScript inference engine, editable network parameters, a basic interactive inference view, and a Worker-based generic Playground session runner with an environment code editor. Neuroevolution orchestration, the full visual network editor, environment code editor, persistence, and WebNN execution are still pending.
+The repository now contains the React + TypeScript + Vite workspace shell, an initial MLP model and JavaScript inference engine, editable network parameters, a basic interactive inference view, and a Worker-based generic Playground session runner with an environment code editor. Neuroevolution orchestration, the full visual network editor (including layer/node creation), persistence, and WebNN execution are still pending.
