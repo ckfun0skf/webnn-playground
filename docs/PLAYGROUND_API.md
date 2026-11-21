@@ -41,6 +41,7 @@ A session must call `ctx.finish({ fitness, metrics? })` exactly once. The fitnes
 | `ctx.network.predict(input)` | Asynchronously run the candidate network. Input must be a finite number array with the model's configured input length. |
 | `ctx.finish({ fitness, metrics? })` | Complete this candidate evaluation. Returns a promise that resolves when the engine acknowledges the result. |
 | `ctx.report(metrics)` | Send progress metrics to the host UI. |
+| `ctx.render(view)` | Publish an environment-defined visualization snapshot to the host UI. The view can be any structured-clone-compatible data; a renderer can interpret its shape. |
 | `ctx.random()` | Deterministic pseudo-random number based on the session seed. |
 | `ctx.yield()` | Yield to the Worker event loop. |
 | `ctx.signal` | AbortSignal for cooperative cancellation. |
@@ -59,8 +60,9 @@ Options:
 - `timeoutMs`: optional session time limit (default 30 seconds).
 - `signal`: optional AbortSignal for cancellation.
 - `onReport`: optional callback for progress metrics.
+- `onRender`: optional callback for visualization snapshots.
 
-The environment and candidate network both execute inside the dedicated Worker. The Worker compiles the candidate model and exposes only the `ctx.network.predict(input)` function to the environment module; the main UI thread receives progress reports and the final result. This keeps repeated inference off the UI thread.
+The environment and candidate network both execute inside the dedicated Worker. The Worker compiles the candidate model and exposes only the `ctx.network.predict(input)` function to the environment module; the main UI thread receives progress reports, visualization snapshots, and the final result. This keeps repeated inference off the UI thread.
 
 ## Lifecycle and failure behavior
 
