@@ -367,7 +367,8 @@ function TrainingStudio({
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const updateNumber = (key: keyof NeuroevolutionConfig, value: number) => {
+  type NumericConfigKey = "populationSize" | "generations" | "eliteCount" | "tournamentSize" | "crossoverRate" | "mutationRate" | "mutationScale" | "evaluationTimeoutMs" | "seed";
+  const updateNumber = (key: NumericConfigKey, value: number) => {
     if (!Number.isFinite(value)) return;
     setConfig((current) => {
       if (key === "populationSize") {
