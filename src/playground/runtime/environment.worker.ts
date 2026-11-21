@@ -99,7 +99,7 @@ async function runSession(message: StartMessage): Promise<void> {
         scope.postMessage({ type: "report", metrics });
       },
       render(view: unknown): void {
-        scope.postMessage({ type: "render", view });
+        if (message.renderEnabled) scope.postMessage({ type: "render", view });
       },
       random: createSeededRandom(message.session.seed),
       yield: () => new Promise<void>((resolve) => setTimeout(resolve, 0)),
