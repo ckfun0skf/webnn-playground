@@ -146,60 +146,43 @@ export async function runNeuroevolution(
   let best: CandidateEvaluation | undefined;
 
   for (let generation = 0; generation < config.generations; generation += 1) {
-    const generationResults: CandidateEvaluation[] = [];
-
-    for (let candidateIndex = 0; candidateIndex < population.length; candidateIndex += 1) {
+    const generationResults = await Promise.all(population.map(async (network, candidateIndex) => {
       if (options.signal?.aborted) {
         throw new Error(options.signal.reason?.toString() ?? "Neuroevolution cancelled.");
       }
-
-      const network = population[candidateIndex];
       const candidateId = `${runId}-g${generation}-c${candidateIndex}`;
       const seed = Math.floor(random() * 0xffffffff);
-
-      let evaluation: CandidateEvaluation;
       try {
         const result = await runPlaygroundSession({
           source: options.environmentSource,
           network,
-          session: {
-            sessionId: candidateId,
-            generation,
-            candidateIndex,
-            seed,
-          },
+          session: { sessionId: candidateId, generation, candidateIndex, seed },
           config: options.configForEnvironment,
           timeoutMs: config.evaluationTimeoutMs,
           signal: options.signal,
+          onRender: (view) => options.onPopulationRender?.(generation, candidateIndex, view),
         });
-        evaluation = {
-          id: candidateId,
-          generation,
-          candidateIndex,
-          network,
-          fitness: result.fitness,
-          metrics: result.metrics,
+        const evaluation: CandidateEvaluation = {
+          id: candidateId, generation, candidateIndex, network,
+          fitness: result.fitness, metrics: result.metrics,
         };
+        evaluations.push(evaluation);
+        options.onCandidate?.(evaluation);
+        return evaluation;
       } catch (error) {
         if (options.signal?.aborted) {
           throw new Error(options.signal.reason?.toString() ?? "Neuroevolution cancelled.");
         }
-        evaluation = {
-          id: candidateId,
-          generation,
-          candidateIndex,
-          network,
+        const evaluation: CandidateEvaluation = {
+          id: candidateId, generation, candidateIndex, network,
           fitness: -Number.MAX_VALUE,
           error: error instanceof Error ? error.message : String(error),
         };
+        evaluations.push(evaluation);
+        options.onCandidate?.(evaluation);
+        return evaluation;
       }
-
-      generationResults.push(evaluation);
-      evaluations.push(evaluation);
-      if (!best || evaluation.fitness > best.fitness) best = evaluation;
-      options.onCandidate?.(evaluation);
-    }
-
+    }));
     const ranked = [...generationResults].sort((a, b) => b.fitness - a.fitness);
     const summary = summarizeGeneration(generation, ranked);
     history.push(summary);
