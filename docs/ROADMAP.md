@@ -31,13 +31,14 @@ The roadmap is organized around working vertical slices. The generic Playground 
 - [x] Add a basic environment code editor and runtime logs.
 
 ## Phase 3 — Neuroevolution
-- [ ] Implement population initialization.
-- [ ] Implement fitness collection and generation statistics.
-- [ ] Implement selection, elitism, mutation, and optional crossover.
-- [ ] Add configurable population/evaluation settings.
-- [ ] Add pause, resume, stop, and bounded evaluation concurrency.
-- [ ] Add candidate history and best-network checkpointing.
-- [ ] Validate the engine with the non-game environment.
+- [x] Implement population initialization.
+- [x] Implement fitness collection and generation statistics.
+- [x] Implement tournament selection, elitism, mutation, and uniform crossover.
+- [x] Add configurable population, generation, and genetic-operation settings.
+- [ ] Add pause, resume, and bounded evaluation concurrency (current runner is sequential and supports cancellation).
+- [x] Add candidate fitness history and best-candidate selection in the Training Studio.
+- [ ] Persist best-network checkpoints in the Network Library.
+- [ ] Validate the engine end-to-end with the non-game environment in a browser.
 
 ## Phase 4 — Snake as a built-in Playground
 - [ ] Implement Snake as a normal environment module using the public contract.
