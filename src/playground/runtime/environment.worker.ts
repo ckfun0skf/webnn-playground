@@ -8,6 +8,7 @@ type StartMessage = {
   network: MLPNetwork;
   session: PlaygroundSessionMetadata;
   config: Record<string, unknown>;
+  renderEnabled: boolean;
 };
 type IncomingMessage =
   | StartMessage
