@@ -105,6 +105,7 @@ At minimum, the neuroevolution integration must support:
 - Access to the current candidate's network through a stable inference API.
 - Repeated inference calls during a session, with input/output shape validation.
 - A session-end signal carrying a numeric fitness score and optional structured metrics.
+- A generic visualization event so the environment can publish state snapshots for a host-provided renderer.
 - A timeout/cancellation path for environments that fail to finish.
 - Deterministic seed information where possible, so evaluations can be reproduced.
 - Session isolation so one candidate's state cannot leak into another candidate's evaluation.
