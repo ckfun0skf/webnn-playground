@@ -122,6 +122,7 @@ The environment context should expose only narrow, documented capabilities:
 | `ctx.network.predict(input)` | Run inference using the current candidate network |
 | `ctx.finish({ fitness, metrics })` | Signal that the session is complete and submit its result |
 | `ctx.report(metrics)` | Publish optional progress metrics |
+| `ctx.render(view)` | Publish a structured-clone-compatible visualization snapshot |
 | `ctx.random()` | Seeded pseudo-random value for reproducible runs |
 | `ctx.yield()` | Yield control so the scheduler/UI can process messages |
 | `ctx.signal` | AbortSignal-like cancellation indicator |
