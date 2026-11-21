@@ -104,7 +104,10 @@ async function runSession(message: StartMessage): Promise<void> {
         if (message.renderEnabled) scope.postMessage({ type: "render", view });
       },
       random: createSeededRandom(message.session.seed),
-      yield: () => new Promise<void>((resolve) => setTimeout(resolve, 0)),
+      yield: () => new Promise<void>((resolve) => {
+        const delay = Math.max(0, Math.min(2000, Number(message.config.stepDelayMs) || 0));
+        setTimeout(resolve, delay);
+      }),
       signal: controller.signal,
       session: Object.freeze({ ...message.session }),
       config: Object.freeze({ ...message.config }),
