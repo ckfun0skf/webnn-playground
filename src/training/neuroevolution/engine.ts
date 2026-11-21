@@ -203,6 +203,11 @@ export async function runNeuroevolution(
     history.push(summary);
     options.onGeneration?.(summary);
 
+    if (summary.successfulEvaluations === 0) {
+      const firstError = ranked[0]?.error ?? "Unknown environment evaluation error.";
+      throw new Error(`All candidate evaluations failed in generation ${generation + 1}. ${firstError}`);
+    }
+
     if (generation < config.generations - 1) {
       population = createNextGeneration(ranked, config, random, generation + 1);
     }
