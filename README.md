@@ -31,6 +31,15 @@ The intended lifecycle is:
 
 See [Architecture](docs/ARCHITECTURE.md) for the proposed environment contract and runtime boundaries.
 
+## Current core APIs
+
+- `createMLP(options)`: create a validated MLP with initialized parameters.
+- `updateLayerParameters(network, layerId, update)`: immutably update layer weights, biases, or activation.
+- `validateNetwork(network)`: inspect schema and parameter-shape errors.
+- `compileMLP(network)`: compile a reusable JavaScript forward-pass predictor.
+
+The Network workspace includes a first working inference path. Automated unit tests cover MLP construction, forward propagation, activation behavior, and validation.
+
 ## Documentation
 
 - [Product Requirements](docs/PRD.md)
