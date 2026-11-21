@@ -66,7 +66,7 @@ The environment and candidate network both execute inside the dedicated Worker. 
 
 1. The host creates a Worker and imports the environment module.
 2. The runtime calls `sessionStart(ctx)`.
-3. Each `ctx.network.predict` request is serviced by the host's JavaScript inference backend.
+3. The Worker executes each `ctx.network.predict` call through its compiled JavaScript inference function.
 4. The environment reports progress and eventually calls `ctx.finish`.
 5. The host validates and acknowledges fitness.
 6. The runtime calls optional `sessionEnd(ctx, result)`.
