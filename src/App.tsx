@@ -1,10 +1,11 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createMLP, updateLayerParameters, type MLPNetwork } from "./core/model";
 import { compileMLP } from "./core/engine";
 import { runPlaygroundSession } from "./playground/runtime";
 import { DEFAULT_NEUROEVOLUTION_CONFIG, runNeuroevolution } from "./training/neuroevolution";
 import type { CandidateEvaluation, GenerationSummary, NeuroevolutionConfig } from "./training/neuroevolution";
 import snakeEnvironmentSource from "./playground/examples/snake.environment.js?raw";
+import { deleteSavedNetwork, listSavedNetworks, saveNetwork, type SavedNetworkRecord } from "./storage";
 import {
   Activity,
   BrainCircuit,
@@ -43,10 +44,15 @@ export default function App() {
   const [projectName] = useState("Untitled experiment");
   const [network, setNetwork] = useState<MLPNetwork | null>(null);
   const [environmentSource, setEnvironmentSource] = useState(DEFAULT_ENVIRONMENT_CODE);
+  const [libraryRevision, setLibraryRevision] = useState(0);
   const [inputText, setInputText] = useState("0, 0, 0");
   const [prediction, setPrediction] = useState<number[] | null>(null);
   const [inferenceError, setInferenceError] = useState<string | null>(null);
   const capabilities = useMemo(detectCapabilities, []);
+  const saveToLibrary = async (model: MLPNetwork) => {
+    await saveNetwork(model);
+    setLibraryRevision((revision) => revision + 1);
+  };
 
   return (
     <div className="app-shell">
@@ -116,10 +122,10 @@ export default function App() {
           </div>
         </div>
 
-        {workspace === "network" && <NetworkOverview network={network} setNetwork={setNetwork} inputText={inputText} setInputText={setInputText} prediction={prediction} setPrediction={setPrediction} inferenceError={inferenceError} setInferenceError={setInferenceError} />}
-        {workspace === "training" && <TrainingStudio network={network} setNetwork={setNetwork} environmentSource={environmentSource} setWorkspace={setWorkspace} />}
+        {workspace === "network" && <NetworkOverview network={network} setNetwork={setNetwork} onSaveNetwork={saveToLibrary} inputText={inputText} setInputText={setInputText} prediction={prediction} setPrediction={setPrediction} inferenceError={inferenceError} setInferenceError={setInferenceError} />}
+        {workspace === "training" && <TrainingStudio network={network} setNetwork={setNetwork} onSaveNetwork={saveToLibrary} environmentSource={environmentSource} setWorkspace={setWorkspace} />}
         {workspace === "playground" && <PlaygroundOverview network={network} setNetwork={setNetwork} source={environmentSource} setSource={setEnvironmentSource} />}
-        {workspace === "library" && <ComingSoon icon={FolderOpen} title="Network Library" description="Saved networks and selected evolution candidates will be available here, ready to reload into inference or a Playground." />}
+        {workspace === "library" && <NetworkLibrary revision={libraryRevision} onLoad={(model) => { setNetwork(model); setWorkspace("network"); }} />}
       </main>
     </div>
   );
@@ -137,6 +143,7 @@ function getSubtitle(workspace: Workspace) {
 function NetworkOverview({
   network,
   setNetwork,
+  onSaveNetwork,
   inputText,
   setInputText,
   prediction,
@@ -146,6 +153,7 @@ function NetworkOverview({
 }: {
   network: MLPNetwork | null;
   setNetwork: (network: MLPNetwork | null) => void;
+  onSaveNetwork: (network: MLPNetwork) => Promise<void>;
   inputText: string;
   setInputText: (value: string) => void;
   prediction: number[] | null;
@@ -153,6 +161,7 @@ function NetworkOverview({
   inferenceError: string | null;
   setInferenceError: (value: string | null) => void;
 }) {
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const createNetwork = () => {
     const next = createMLP({
       name: "My first MLP",
@@ -294,6 +303,11 @@ function NetworkOverview({
               <button className="primary-button full-button" onClick={runInference}><Play size={14} /> Run inference</button>
               {inferenceError && <p className="inference-error">{inferenceError}</p>}
               {prediction && <div className="prediction-result"><span>OUTPUT</span><strong>{prediction.map((value) => value.toFixed(5)).join(" · ")}</strong></div>}
+              <button className="secondary-button full-button" onClick={async () => {
+                try { await onSaveNetwork(network); setSaveMessage("Saved to Network Library."); }
+                catch (error) { setSaveMessage(error instanceof Error ? error.message : String(error)); }
+              }}><FolderOpen size={14} /> Save to Network Library</button>
+              {saveMessage && <p className="save-message">{saveMessage}</p>}
               <button className="secondary-button full-button" onClick={() => { setNetwork(null); setPrediction(null); setInferenceError(null); }}>Close network</button>
             </>
           )}
@@ -385,11 +399,13 @@ function EnvironmentVisualization({ view }: { view: unknown }) {
 function TrainingStudio({
   network,
   setNetwork,
+  onSaveNetwork,
   environmentSource,
   setWorkspace,
 }: {
   network: MLPNetwork | null;
   setNetwork: (network: MLPNetwork | null) => void;
+  onSaveNetwork: (network: MLPNetwork) => Promise<void>;
   environmentSource: string;
   setWorkspace: (workspace: Workspace) => void;
 }) {
@@ -399,6 +415,7 @@ function TrainingStudio({
   const [history, setHistory] = useState<GenerationSummary[]>([]);
   const [events, setEvents] = useState<{ generation: number; candidateIndex: number; fitness: number; error?: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   type NumericConfigKey = "populationSize" | "generations" | "eliteCount" | "tournamentSize" | "crossoverRate" | "mutationRate" | "mutationScale" | "evaluationTimeoutMs" | "seed";
@@ -517,6 +534,11 @@ function TrainingStudio({
               <strong className="best-fitness">{best.fitness.toFixed(7)}</strong>
               <p>Generation {best.generation + 1} · Candidate {best.candidateIndex + 1}</p>
               <button className="primary-button full-button" onClick={() => { setNetwork(best.network); setWorkspace("network"); }}><BrainCircuit size={14} /> Load best network</button>
+              <button className="secondary-button full-button" onClick={async () => {
+                try { await onSaveNetwork(best.network); setSaveMessage("Best candidate saved to Network Library."); }
+                catch (saveError) { setSaveMessage(saveError instanceof Error ? saveError.message : String(saveError)); }
+              }}><FolderOpen size={14} /> Save best network</button>
+              {saveMessage && <p className="save-message">{saveMessage}</p>}
             </>
           ) : <p className="empty-logs">The best-performing network will appear here.</p>}
         </section>
@@ -695,6 +717,63 @@ function PlaygroundOverview({
   );
 }
 
+function NetworkLibrary({
+  revision,
+  onLoad,
+}: {
+  revision: number;
+  onLoad: (network: MLPNetwork) => void;
+}) {
+  const [records, setRecords] = useState<SavedNetworkRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    listSavedNetworks()
+      .then((items) => { if (active) setRecords(items); })
+      .catch((loadError) => { if (active) setError(loadError instanceof Error ? loadError.message : String(loadError)); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [revision]);
+
+  const remove = async (id: string) => {
+    try {
+      await deleteSavedNetwork(id);
+      setRecords((current) => current.filter((record) => record.id !== id));
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : String(deleteError));
+    }
+  };
+
+  return (
+    <section className="panel network-library-panel">
+      <div className="panel-heading">
+        <div><div className="panel-kicker">LOCAL MODEL STORAGE</div><h2>Saved networks</h2></div>
+        <span className="model-chip">INDEXEDDB</span>
+      </div>
+      {loading ? <p className="empty-logs">Loading saved networks…</p> : records.length === 0 ? (
+        <div className="library-empty"><FolderOpen size={25} /><strong>No saved networks yet</strong><p>Save a model from the Network workspace or keep the best candidate from a Neuroevolution run.</p></div>
+      ) : (
+        <div className="saved-network-list">
+          {records.map((record) => (
+            <div className="saved-network-row" key={record.id}>
+              <div className="saved-network-icon"><BrainCircuit size={18} /></div>
+              <div className="saved-network-copy">
+                <strong>{record.name}</strong>
+                <span>{record.network.inputSize} inputs · {record.network.layers.map((layer) => layer.units).join(" → ")} · Updated {new Date(record.updatedAt).toLocaleString()}</span>
+              </div>
+              <button className="secondary-button" onClick={() => onLoad(record.network)}>Load</button>
+              <button className="small-icon-button" title="Delete saved network" aria-label="Delete saved network" onClick={() => void remove(record.id)}><span>×</span></button>
+            </div>
+          ))}
+        </div>
+      )}
+      {error && <div className="environment-error">{error}</div>}
+    </section>
+  );
+}
 function ComingSoon({ icon: Icon, title, description }: { icon: typeof BrainCircuit; title: string; description: string }) {
   return (
     <section className="panel coming-soon">
