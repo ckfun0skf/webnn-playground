@@ -106,6 +106,13 @@ describe("runPlaygroundSession", () => {
         super();
         worker = this;
       }
+      postMessage(message: { type: string; [key: string]: unknown }) {
+        if (message.type === "cancel") {
+          queueMicrotask(() => this.onmessage?.({
+            data: { type: "cancelled" },
+          } as MessageEvent));
+        }
+      }
     });
     const controller = new AbortController();
     const network = createMLP({
