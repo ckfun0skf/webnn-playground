@@ -95,7 +95,7 @@ self.addEventListener("message", async (event) => {
 
     await environment.sessionStart(context);
     if (!finished) {
-      self.postMessage({ type: "incomplete" });
+      self.postMessage({ type: activeController.signal.aborted ? "cancelled" : "incomplete" });
       return;
     }
 
