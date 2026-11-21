@@ -14,6 +14,7 @@ export type WorkerRequest =
 
 export type WorkerMessage =
   | { type: "report"; metrics: Record<string, unknown> }
+  | { type: "render"; view: unknown }
   | { type: "finish"; result: PlaygroundSessionResult }
   | { type: "cleanup-complete" }
   | { type: "incomplete" }
