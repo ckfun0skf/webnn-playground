@@ -43,6 +43,19 @@ The model layer must separate:
 - Runtime/backend-specific compiled artifacts.
 - Training metadata and checkpoints.
 
+## 2.1 Initial MLP schema and JavaScript execution
+
+The first canonical model version is a sequential MLP:
+
+- `schemaVersion`: versioned model format (currently `1`).
+- `kind`: `mlp`.
+- `inputSize`: required input vector length.
+- `layers`: ordered dense layers. Each layer stores its stable ID, unit count, activation, a weight matrix (one row per output unit), and one bias per output unit.
+
+The initial activation set is `linear`, `relu`, `tanh`, `sigmoid`, and `softmax`. Parameter editing produces a new immutable network object and validates matrix dimensions and finite values.
+
+The JavaScript backend exposes `compileMLP(network)`, which validates and snapshots the model once, then returns a predictor function for repeated inference. This is the baseline semantic reference for future training algorithms and the optional WebNN adapter. A predictor rejects wrong-sized or non-finite input vectors.
+
 ## 3. Execution backends
 
 ### JavaScript backend
