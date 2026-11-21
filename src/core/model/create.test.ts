@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMLP, updateLayerParameters } from "./create";
+import { appendDenseLayer, createMLP, removeLastDenseLayer, resizeLayerUnits, updateLayerParameters } from "./create";
 import { validateNetwork } from "./validate";
 import { compileMLP } from "../engine/forward";
 
@@ -60,6 +60,41 @@ describe("MLP model", () => {
     expect(() => updateLayerParameters(network, network.layers[0].id, {
       weights: [[1, 2, 3]],
     })).toThrow(/Invalid neural network/);
+  });
+
+  it("resizes a hidden layer and keeps the following weight matrix aligned", () => {
+    const network = createMLP({
+      id: "resize-network",
+      inputSize: 2,
+      layers: [{ units: 3 }, { units: 2, activation: "softmax" }],
+      random: () => 0.5,
+    });
+
+    const expanded = resizeLayerUnits(network, network.layers[0].id, 5, () => 0.5);
+    expect(expanded.layers[0].weights).toHaveLength(5);
+    expect(expanded.layers[1].weights[0]).toHaveLength(5);
+    expect(validateNetwork(expanded)).toEqual([]);
+
+    const reduced = resizeLayerUnits(expanded, expanded.layers[0].id, 2, () => 0.5);
+    expect(reduced.layers[0].weights).toHaveLength(2);
+    expect(reduced.layers[1].weights[0]).toHaveLength(2);
+    expect(validateNetwork(reduced)).toEqual([]);
+  });
+
+  it("appends and removes dense layers without invalidating the network", () => {
+    const network = createMLP({
+      id: "layer-network",
+      inputSize: 2,
+      layers: [{ units: 3 }],
+      random: () => 0.5,
+    });
+    const appended = appendDenseLayer(network, 4, "tanh", () => 0.5);
+
+    expect(appended.layers).toHaveLength(2);
+    expect(appended.layers[1].weights[0]).toHaveLength(3);
+    expect(validateNetwork(appended)).toEqual([]);
+    expect(removeLastDenseLayer(appended).layers).toHaveLength(1);
+    expect(() => removeLastDenseLayer(network)).toThrow(/at least one dense layer/);
   });
 
   it("does not mutate the source network when updating parameters", () => {
