@@ -9,6 +9,7 @@ export type WorkerRequest =
       session: PlaygroundSessionMetadata;
       config: Record<string, unknown>;
       renderEnabled: boolean;
+      reportEnabled: boolean;
     }
   | { type: "finish-ack" }
   | { type: "cancel"; reason: string };
