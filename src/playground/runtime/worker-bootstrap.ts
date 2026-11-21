@@ -49,9 +49,9 @@ self.addEventListener("message", async (event) => {
         }
       },
       finish(result) {
-        if (finished) return Promise.reject(new Error("finish() may only be called once."));
+        if (finished) throw new Error("finish() may only be called once.");
         if (!result || typeof result.fitness !== "number" || !Number.isFinite(result.fitness)) {
-          return Promise.reject(new Error("finish() requires a finite numeric fitness value."));
+          throw new Error("finish() requires a finite numeric fitness value.");
         }
         finished = true;
         finishResult = result;
