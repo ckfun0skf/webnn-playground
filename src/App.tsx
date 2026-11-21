@@ -121,6 +121,23 @@ export default function App() {
             <button className="primary-button"><Plus size={15} /> New {workspace === "playground" ? "environment" : workspace === "network" ? "network" : "experiment"}</button>
           </div>
         </div>
+        {workspace === "network" && !network && (
+          <section className="getting-started panel">
+            <div className="getting-started-copy">
+              <span className="panel-kicker">NEW HERE? START WITH A WORKING EXAMPLE</span>
+              <h2>Train a neural network to play Snake</h2>
+              <p>No setup required. Load the example, watch the game board, then evolve a better Snake agent.</p>
+              <div className="getting-started-steps">
+                <span><b>1</b> Load Snake</span><span><b>2</b> Run the simulation</span><span><b>3</b> Train the agent</span>
+              </div>
+            </div>
+            <button className="primary-button" onClick={() => {
+              setEnvironmentSource(snakeEnvironmentSource);
+              setNetwork(createMLP({ name: "Snake agent", inputSize: 11, layers: [{ units: 16, activation: "relu" }, { units: 3, activation: "softmax" }] }));
+              setWorkspace("playground");
+            }}><Play size={14} /> Try Snake</button>
+          </section>
+        )}
 
         {workspace === "network" && <NetworkOverview network={network} setNetwork={setNetwork} onSaveNetwork={saveToLibrary} inputText={inputText} setInputText={setInputText} prediction={prediction} setPrediction={setPrediction} inferenceError={inferenceError} setInferenceError={setInferenceError} />}
         {workspace === "training" && <TrainingStudio network={network} setNetwork={setNetwork} onSaveNetwork={saveToLibrary} environmentSource={environmentSource} setWorkspace={setWorkspace} />}
@@ -642,6 +659,11 @@ function PlaygroundOverview({
                 inputSize: 11,
                 layers: [{ units: 16, activation: "relu" }, { units: 3, activation: "softmax" }],
               }));
+              setRenderedView({
+                type: "snake", width: 12, height: 12,
+                snake: [{ x: 6, y: 6, head: true }, { x: 5, y: 6 }, { x: 4, y: 6 }],
+                food: { x: 9, y: 3 }, score: 0, steps: 0, terminal: false,
+              });
               setResult(null);
               setLogs([]);
               setRenderedView(null);
@@ -653,6 +675,12 @@ function PlaygroundOverview({
         <div className="environment-editor-meta">
           <span>Exports <code>sessionStart(ctx)</code> and optional <code>sessionEnd(ctx, result)</code></span>
           <span>{source.split("\n").length} lines</span>
+        </div>
+        <div className="playground-howto">
+          <strong>How to run this example</strong>
+          <span>1. Click <b>Load Snake</b> to load the game and its matching 11-input / 3-output network.</span>
+          <span>2. Click <b>Run environment</b> to watch one Snake session.</span>
+          <span>3. Open <b>Training</b> and click <b>Start evolution</b> to train across a population.</span>
         </div>
         <textarea
           className="environment-code"
