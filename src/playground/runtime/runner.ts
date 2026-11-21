@@ -62,7 +62,7 @@ export function runPlaygroundSession(
     const timeout = setTimeout(() => fail(new Error(`Session timed out after ${timeoutMs}ms.`)), timeoutMs);
 
     if (options.signal?.aborted) {
-      onAbort();
+      fail(cancellationError());
       return;
     }
     options.signal?.addEventListener("abort", onAbort, { once: true });
