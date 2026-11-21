@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createMLP, updateLayerParameters, type MLPNetwork } from "./core/model";
+import { appendDenseLayer, createMLP, removeLastDenseLayer, resizeLayerUnits, updateLayerParameters, type MLPNetwork } from "./core/model";
 import { compileMLP } from "./core/engine";
 import { runPlaygroundSession } from "./playground/runtime";
 import { DEFAULT_NEUROEVOLUTION_CONFIG, runNeuroevolution } from "./training/neuroevolution";
@@ -228,11 +228,11 @@ function NetworkOverview({
         </div>
         {network && (
           <div className="model-details">
-            <div className="model-detail-heading"><strong>Layer parameters</strong><span>{network.layers.length} dense layers</span></div>
+            <div className="model-detail-heading"><div><strong>Layer parameters</strong><span>{network.layers.length} dense layers</span></div><button className="secondary-button" onClick={() => { setNetwork(appendDenseLayer(network, 4)); setPrediction(null); }}><Plus size={13} /> Add layer</button></div>
             {network.layers.map((layer, index) => (
               <div className="layer-editor" key={layer.id}>
                 <div className="layer-detail">
-                  <div><strong>Layer {index + 1}</strong><span>{layer.units} units</span></div>
+                  <div className="layer-heading-controls"><strong>Layer {index + 1}</strong><label className="unit-count-control">UNITS<input type="number" min="1" max="128" value={layer.units} onChange={(event) => { if (Number.isInteger(event.target.valueAsNumber) && event.target.valueAsNumber > 0) { setNetwork(resizeLayerUnits(network, layer.id, event.target.valueAsNumber)); setPrediction(null); } }} /></label>{index === network.layers.length - 1 && network.layers.length > 1 && <button className="text-button remove-layer-button" onClick={() => { setNetwork(removeLastDenseLayer(network)); setPrediction(null); }}>Remove layer</button>}</div>
                   <label className="activation-control">ACTIVATION
                     <select
                       value={layer.activation}
