@@ -1,13 +1,18 @@
-import type { PlaygroundSessionResult } from "../api/types";
+import type { MLPNetwork } from "../../core/model";
+import type { PlaygroundSessionMetadata, PlaygroundSessionResult } from "../api/types";
 
 export type WorkerRequest =
-  | { type: "start"; source: string; session: unknown; config: unknown }
-  | { type: "infer-result"; requestId: number; output?: number[]; error?: string }
+  | {
+      type: "start";
+      source: string;
+      network: MLPNetwork;
+      session: PlaygroundSessionMetadata;
+      config: Record<string, unknown>;
+    }
   | { type: "finish-ack" }
   | { type: "cancel"; reason: string };
 
 export type WorkerMessage =
-  | { type: "predict"; requestId: number; input: number[] }
   | { type: "report"; metrics: Record<string, unknown> }
   | { type: "finish"; result: PlaygroundSessionResult }
   | { type: "cleanup-complete" }
