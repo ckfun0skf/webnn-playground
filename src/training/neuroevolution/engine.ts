@@ -44,14 +44,17 @@ function validateOptions(options: RunNeuroevolutionOptions): void {
   if (!Number.isInteger(config.tournamentSize) || config.tournamentSize < 1) {
     throw new Error("tournamentSize must be a positive integer.");
   }
-  if (config.crossoverRate < 0 || config.crossoverRate > 1) {
+  if (!Number.isFinite(config.crossoverRate) || config.crossoverRate < 0 || config.crossoverRate > 1) {
     throw new Error("crossoverRate must be between 0 and 1.");
   }
-  if (config.mutationRate < 0 || config.mutationRate > 1) {
+  if (!Number.isFinite(config.mutationRate) || config.mutationRate < 0 || config.mutationRate > 1) {
     throw new Error("mutationRate must be between 0 and 1.");
   }
   if (!Number.isFinite(config.mutationScale) || config.mutationScale < 0) {
     throw new Error("mutationScale must be a finite non-negative number.");
+  }
+  if (!Number.isInteger(config.seed)) {
+    throw new Error("seed must be an integer.");
   }
   if (!Number.isFinite(config.evaluationTimeoutMs) || config.evaluationTimeoutMs <= 0) {
     throw new Error("evaluationTimeoutMs must be a positive number.");
