@@ -197,3 +197,21 @@ h1 { margin: 0; font-size: 25px; font-weight: 600; letter-spacing: -.7px; }
 .prediction-result span { color: #75c69c; font: 8px var(--mono); letter-spacing: .08em; }
 .prediction-result strong { color: #c5e9d4; font: 10px var(--mono); overflow-wrap: anywhere; }
 .inference-error { color: #f09b9b !important; font-size: 10px !important; }
+
+
+.layer-editor { padding: 10px 0 12px; border-top: 1px solid #282d36; }
+.layer-editor .layer-detail { padding: 0 0 9px; border: 0; }
+.activation-control { display: flex; align-items: center; gap: 7px; color: #77808e; font: 8px var(--mono); }
+.activation-control select { max-width: 95px; height: 25px; padding: 0 5px; color: #c8c0ff; background: #222033; border: 1px solid #494166; border-radius: 4px; font: 9px var(--mono); }
+.parameter-row { display: flex; align-items: flex-end; gap: 9px; padding: 6px 0; border-top: 1px dashed #2a303a; }
+.parameter-neuron { width: 25px; padding-bottom: 7px; color: #a99aff; font: 8px var(--mono); }
+.parameter-values { display: flex; flex: 1; flex-wrap: wrap; gap: 5px; }
+.parameter-values label, .parameter-bias { display: flex; flex-direction: column; gap: 3px; color: #707988; font: 7px var(--mono); }
+.parameter-values input, .parameter-bias input { width: 65px; height: 25px; padding: 0 5px; color: #cbd1dc; background: #11141a; border: 1px solid #343b47; border-radius: 4px; font: 9px var(--mono); }
+.parameter-bias { flex: 0 0 65px; }
+.parameter-values input:focus, .parameter-bias input:focus { border-color: #8f80df; outline: none; }
+@media (max-width: 760px) {
+  .parameter-row { flex-wrap: wrap; }
+  .parameter-values { order: 2; flex-basis: calc(100% - 34px); }
+  .parameter-bias { order: 3; margin-left: 34px; }
+}
