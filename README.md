@@ -41,6 +41,6 @@ See [Architecture](docs/ARCHITECTURE.md) for the proposed environment contract a
 
 The application must be deployable to GitHub Pages without a backend server. User code and simulations execute client-side. Browser storage is used for local projects and saved networks, with import/export for portability.
 
-## Status
+## Current implementation
 
-Project foundation and architecture definition. Implementation has not started.
+The repository now contains the initial React + TypeScript + Vite workspace shell, responsive navigation, browser capability indicators, and a GitHub Pages deployment workflow. The network editor, training engine, generic Playground runtime, and persistence are not implemented yet.
