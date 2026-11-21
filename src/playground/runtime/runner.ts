@@ -76,7 +76,11 @@ export function runPlaygroundSession(
           } satisfies WorkerRequest);
         }
       } else if (message.type === "report") {
-        options.onReport?.(message.metrics);
+        try {
+          options.onReport?.(message.metrics);
+        } catch (error) {
+          fail(error instanceof Error ? error : new Error(String(error)));
+        }
       } else if (message.type === "finish") {
         if (finishReceived) {
           fail(new Error("Environment called finish() more than once."));
