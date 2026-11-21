@@ -37,7 +37,7 @@ See [Playground API](docs/PLAYGROUND_API.md) for the environment contract and [A
 - `updateLayerParameters(network, layerId, update)`: immutably update layer weights, biases, or activation.
 - `validateNetwork(network)`: inspect schema and parameter-shape errors.
 - `compileMLP(network)`: compile a reusable JavaScript forward-pass predictor.
-- `runPlaygroundSession(options)`: execute a user-authored environment in a Worker with network inference, fitness reporting, cancellation, and timeout handling.
+- `runPlaygroundSession(options)`: execute a user-authored environment in a Worker with network inference, progress reporting, visualization events, fitness collection, cancellation, and timeout handling.
 
 The Network workspace includes a first working inference path with editable layer weights, biases, and activation functions. The Playground workspace includes a JavaScript environment editor wired to the Worker session runtime, progress reports, cancellation, and fitness output. Automated unit tests cover MLP construction, forward propagation, activation behavior, validation, seeded randomness, and Worker bootstrap syntax.
 
@@ -54,4 +54,4 @@ The application must be deployable to GitHub Pages without a backend server. Use
 
 ## Current implementation
 
-The repository now contains the React + TypeScript + Vite workspace shell, an initial MLP model and JavaScript inference engine, editable network parameters, a basic interactive inference view, and a Worker-based generic Playground session runner with an environment code editor. Neuroevolution orchestration, the full visual network editor (including layer/node creation), persistence, and WebNN execution are still pending.
+The repository now contains the React + TypeScript + Vite workspace shell, an initial MLP model and JavaScript inference engine, editable network parameters, a basic interactive inference view, and a Worker-based generic Playground session runner with an environment code editor and generic `ctx.render(view)` visualization channel. Neuroevolution orchestration, the full visual network editor (including layer/node creation), persistence, and WebNN execution are still pending.
