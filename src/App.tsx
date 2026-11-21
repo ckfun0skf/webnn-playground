@@ -434,6 +434,9 @@ function TrainingStudio({
   const [events, setEvents] = useState<{ generation: number; candidateIndex: number; fitness: number; error?: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [playbackDelay, setPlaybackDelay] = useState(80);
+  const [populationViews, setPopulationViews] = useState<Record<number, { view: unknown; fitness?: number; finished?: boolean; error?: string }>>({});
+  const [activeGeneration, setActiveGeneration] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
 
   type NumericConfigKey = "populationSize" | "generations" | "eliteCount" | "tournamentSize" | "crossoverRate" | "mutationRate" | "mutationScale" | "evaluationTimeoutMs" | "seed";
@@ -461,6 +464,8 @@ function TrainingStudio({
     setBest(null);
     setHistory([]);
     setEvents([]);
+    setPopulationViews({});
+    setActiveGeneration(0);
     setError(null);
 
     try {
@@ -469,7 +474,7 @@ function TrainingStudio({
         initialNetwork: activeNetwork,
         environmentSource,
         config,
-        configForEnvironment: { inputSize: activeNetwork.inputSize, outputSize },
+        configForEnvironment: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay },
         signal: controller.signal,
         onCandidate: (candidate) => {
           setEvents((current) => [...current, {
@@ -479,8 +484,24 @@ function TrainingStudio({
             error: candidate.error,
           }]);
           setBest((current) => !current || candidate.fitness > current.fitness ? candidate : current);
+          setPopulationViews((current) => ({
+            ...current,
+            [candidate.candidateIndex]: {
+              ...(current[candidate.candidateIndex] ?? { view: null }),
+              fitness: candidate.fitness,
+              finished: true,
+              error: candidate.error,
+            },
+          }));
         },
-        onGeneration: (summary) => setHistory((current) => [...current, summary]),
+        onPopulationRender: (generation, candidateIndex, view) => {
+          setActiveGeneration(generation);
+          setPopulationViews((current) => ({ ...current, [candidateIndex]: { ...current[candidateIndex], view } }));
+        },
+        onGeneration: (summary) => {
+          setHistory((current) => [...current, summary]);
+          if (summary.generation < config.generations - 1) setPopulationViews({});
+        },
       });
       setBest(result.best);
       setStatus("completed");
@@ -517,6 +538,11 @@ function TrainingStudio({
             <div><span className="panel-kicker">ENVIRONMENT SOURCE</span><strong>{environmentSource.trim() ? "Custom Playground code is ready" : "No environment code"}</strong></div>
             <button className="text-button" onClick={() => setWorkspace("playground")}><Code2 size={13} /> Edit environment</button>
           </div>
+          <div className="playback-speed-control">
+            <label htmlFor="training-speed">Population playback speed</label>
+            <input id="training-speed" type="range" min="0" max="500" step="10" value={playbackDelay} onChange={(event) => setPlaybackDelay(Number(event.target.value))} />
+            <span>{playbackDelay === 0 ? "Fastest" : playbackDelay + " ms / step"}</span>
+          </div>
           <div className="training-actions">
             {status === "running" ? (
               <button className="secondary-button" onClick={cancelTraining}>Cancel training</button>
@@ -529,6 +555,23 @@ function TrainingStudio({
         </div>
       </section>
 
+      <section className="panel population-live-panel">
+        <div className="panel-heading compact">
+          <div><div className="panel-kicker">LIVE POPULATION</div><strong>Generation {activeGeneration + 1} · {config.populationSize} agents</strong></div>
+          <span>{Object.values(populationViews).filter((item) => item.finished).length} / {config.populationSize} finished</span>
+        </div>
+        <p className="population-live-description">Every candidate is playing its own Snake game simultaneously. Each board is driven by that candidate's neural network.</p>
+        <div className="population-board-grid">
+          {Array.from({ length: config.populationSize }, (_, index) => {
+            const candidate = populationViews[index];
+            return <div className="population-agent-card" key={index}>
+              <div className="population-agent-heading"><strong>Agent {String(index + 1).padStart(2, "0")}</strong><span className={candidate?.error ? "candidate-failed" : candidate?.finished ? "candidate-ok" : "population-agent-running"}>{candidate?.error ? "FAILED" : candidate?.finished ? "DONE" : candidate?.view ? "PLAYING" : status === "running" ? "STARTING" : "WAITING"}</span></div>
+              {candidate?.view ? <EnvironmentVisualization view={candidate.view} /> : <div className="population-board-placeholder">Waiting for first frame…</div>}
+              {candidate?.finished && <div className="population-agent-fitness">Fitness <strong>{candidate.fitness?.toFixed(2) ?? "—"}</strong></div>}
+            </div>;
+          })}
+        </div>
+      </section>
       <div className="training-results-grid">
         <section className="panel training-progress-panel">
           <div className="panel-heading compact"><div className="panel-kicker">GENERATION HISTORY</div><span>{history.length} / {config.generations}</span></div>
@@ -596,7 +639,12 @@ function PlaygroundOverview({
   const [status, setStatus] = useState<"idle" | "running" | "completed" | "failed" | "cancelled">("idle");
   const [result, setResult] = useState<{ fitness: number; metrics?: Record<string, unknown> } | null>(null);
   const [logs, setLogs] = useState<Record<string, unknown>[]>([]);
-  const [renderedView, setRenderedView] = useState<unknown>(null);
+  const [playbackDelay, setPlaybackDelay] = useState(80);
+  const [renderedView, setRenderedView] = useState<unknown>(source === snakeEnvironmentSource ? {
+    type: "snake", width: 12, height: 12,
+    snake: [{ x: 6, y: 6, head: true }, { x: 5, y: 6 }, { x: 4, y: 6 }],
+    food: { x: 9, y: 3 }, score: 0, steps: 0, terminal: false,
+  } : null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -627,7 +675,7 @@ function PlaygroundOverview({
           candidateIndex: 0,
           seed: 42,
         },
-        config: { inputSize: activeNetwork.inputSize, outputSize },
+        config: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay },
         timeoutMs: 30_000,
         signal: controller.signal,
         onReport: (metrics) => setLogs((current) => [...current, metrics]),
@@ -666,7 +714,6 @@ function PlaygroundOverview({
               });
               setResult(null);
               setLogs([]);
-              setRenderedView(null);
               setError(null);
               setStatus("idle");
             }}>Load Snake</button>
@@ -690,6 +737,11 @@ function PlaygroundOverview({
           aria-label="Environment JavaScript source code"
         />
         <div className="environment-editor-footer">
+          <div className="playback-speed-control playground-speed-control">
+            <label htmlFor="playground-speed">Playback speed</label>
+            <input id="playground-speed" type="range" min="0" max="500" step="10" value={playbackDelay} onChange={(event) => setPlaybackDelay(Number(event.target.value))} />
+            <span>{playbackDelay === 0 ? "Fastest" : playbackDelay + " ms / step"}</span>
+          </div>
           <div className="selected-network-label">
             <BrainCircuit size={14} />
             <span>{network ? network.name : "A sample 2 → 2 MLP will be created on first run"}</span>
