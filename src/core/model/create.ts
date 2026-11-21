@@ -21,6 +21,7 @@ export function createMLP(options: CreateMLPOptions): MLPNetwork {
     throw new Error("An MLP must contain at least one dense layer.");
   }
 
+  const networkId = options.id ?? createId("network");
   let fanIn = options.inputSize;
   const layers: DenseLayer[] = options.layers.map((definition, index) => {
     if (!Number.isInteger(definition.units) || definition.units < 1) {
@@ -38,7 +39,7 @@ export function createMLP(options: CreateMLPOptions): MLPNetwork {
     );
 
     const layer: DenseLayer = {
-      id: createId("layer"),
+      id: `${networkId}-layer-${index + 1}`,
       type: "dense",
       units: fanOut,
       activation,
@@ -52,7 +53,7 @@ export function createMLP(options: CreateMLPOptions): MLPNetwork {
 
   const network: MLPNetwork = {
     schemaVersion: MODEL_SCHEMA_VERSION,
-    id: options.id ?? createId("network"),
+    id: networkId,
     name: options.name ?? "Untitled MLP",
     kind: "mlp",
     inputSize: options.inputSize,
