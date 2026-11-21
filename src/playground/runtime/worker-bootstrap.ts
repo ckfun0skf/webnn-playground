@@ -20,6 +20,7 @@ self.addEventListener("message", async (event) => {
   }
   if (message.type !== "start") return;
 
+  activeController = new AbortController();
   const moduleUrl = URL.createObjectURL(
     new Blob([message.source], { type: "text/javascript" })
   );
@@ -30,7 +31,10 @@ self.addEventListener("message", async (event) => {
       throw new Error("Environment must export sessionStart(context).");
     }
 
-    activeController = new AbortController();
+    if (activeController.signal.aborted) {
+      self.postMessage({ type: "cancelled" });
+      return;
+    }
     finished = false;
     finishResult = undefined;
     finishAckPromise = new Promise((resolve) => { pendingFinishResolve = resolve; });
