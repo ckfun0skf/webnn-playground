@@ -79,50 +79,39 @@ A custom Playground is JavaScript source code that describes a simulation. It is
 
 The engine owns candidate networks, session identity, lifecycle, cancellation, timeouts, fitness collection, and population scheduling. Environment code owns domain-specific simulation state and rules.
 
-### 4.1 Proposed environment module
+### 4.1 Environment module
 
-The first API proposal is intentionally small:
+The initial contract is implemented in `src/playground/api` and `src/playground/runtime`. A custom environment is an ES module that exports `sessionStart(ctx)`; it may also export `sessionEnd(ctx, result)` for successful-session cleanup.
 
 ```js
-// User-authored environment module
-
 export async function sessionStart(ctx) {
-  // Called once for each candidate evaluation.
-  // Initialize one isolated simulation session.
-
   let state = createInitialState(ctx.random);
 
-  while (!isTerminal(state)) {
+  while (!isTerminal(state) && !ctx.signal.aborted) {
     const observation = observe(state);
-
-    // May be called any number of times in a session.
     const action = await ctx.network.predict(observation);
-
     state = transition(state, action);
+
     ctx.report({ score: state.score, steps: state.steps });
 
     if (isTerminal(state)) {
-      // Required: resolves this candidate's evaluation.
-      ctx.finish({
+      await ctx.finish({
         fitness: calculateFitness(state),
-        metrics: {
-          score: state.score,
-          steps: state.steps
-        }
+        metrics: { score: state.score, steps: state.steps }
       });
+      return;
     }
 
     await ctx.yield();
   }
 }
 
-// Optional cleanup hook, called by the engine after completion/cancellation.
 export async function sessionEnd(ctx, result) {
-  // Release environment-owned resources if needed.
+  // Optional cleanup after a successfully completed session.
 }
 ```
 
-This is a conceptual contract, not an implementation commitment. The exact names and sync/async semantics should be validated in the first runtime prototype.
+The environment owns its simulation and fitness calculation. The host owns the candidate network, session lifecycle, inference execution, and result collection. The environment must return after calling `finish`.
 
 ### 4.2 Context API
 
@@ -149,7 +138,7 @@ For each candidate evaluation:
 2. The runtime calls `sessionStart(ctx)`.
 3. Environment code initializes state and runs its simulation.
 4. The environment calls `ctx.network.predict(input)` whenever it needs an action/output.
-5. The environment calls `ctx.finish({ fitness, metrics })` exactly once when terminal.
+5. The environment awaits `ctx.finish({ fitness, metrics })` exactly once when terminal.
 6. The engine records the evaluation result and invokes optional `sessionEnd(ctx, result)`.
 7. The scheduler disposes the session and proceeds according to the configured concurrency policy.
 
@@ -158,7 +147,7 @@ Failure paths:
 - If the environment returns without calling `finish`, mark it as incomplete unless the API explicitly defines a return-value completion mode.
 - If a session exceeds its time/step budget, cancel it and record a timeout.
 - If `finish` is called more than once, reject subsequent calls and report a contract error.
-- Cancellation must trigger cleanup where possible.
+- Cancellation sends an abort signal to the Worker. Environments should observe `ctx.signal` and release their own resources in `finally` blocks; the host terminates the Worker if it does not cooperate.
 
 ### 4.4 Runtime isolation and trust
 
