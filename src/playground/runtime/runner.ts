@@ -108,12 +108,16 @@ export function runPlaygroundSession(
       }
     };
 
-    worker.postMessage({
-      type: "start",
-      source: options.source,
-      network: options.network,
-      session: options.session,
-      config: options.config ?? {},
-    } satisfies WorkerRequest);
+    try {
+      worker.postMessage({
+        type: "start",
+        source: options.source,
+        network: options.network,
+        session: options.session,
+        config: options.config ?? {},
+      } satisfies WorkerRequest);
+    } catch (error) {
+      fail(error instanceof Error ? error : new Error(String(error)));
+    }
   });
 }
