@@ -304,6 +304,7 @@ function NetworkOverview({
               {inferenceError && <p className="inference-error">{inferenceError}</p>}
               {prediction && <div className="prediction-result"><span>OUTPUT</span><strong>{prediction.map((value) => value.toFixed(5)).join(" · ")}</strong></div>}
               <button className="secondary-button full-button" onClick={async () => {
+                if (!network) return;
                 try { await onSaveNetwork(network); setSaveMessage("Saved to Network Library."); }
                 catch (error) { setSaveMessage(error instanceof Error ? error.message : String(error)); }
               }}><FolderOpen size={14} /> Save to Network Library</button>
@@ -535,6 +536,7 @@ function TrainingStudio({
               <p>Generation {best.generation + 1} · Candidate {best.candidateIndex + 1}</p>
               <button className="primary-button full-button" onClick={() => { setNetwork(best.network); setWorkspace("network"); }}><BrainCircuit size={14} /> Load best network</button>
               <button className="secondary-button full-button" onClick={async () => {
+                if (!best) return;
                 try { await onSaveNetwork(best.network); setSaveMessage("Best candidate saved to Network Library."); }
                 catch (saveError) { setSaveMessage(saveError instanceof Error ? saveError.message : String(saveError)); }
               }}><FolderOpen size={14} /> Save best network</button>
