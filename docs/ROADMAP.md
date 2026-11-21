@@ -5,18 +5,19 @@ The roadmap is organized around working vertical slices. The generic Playground 
 ## Phase 0 — Foundation
 - [x] Create repository README and product requirements.
 - [x] Document the client-side architecture and generic Playground lifecycle.
-- [ ] Choose frontend/build tooling and establish project conventions.
-- [ ] Add GitHub Actions build and GitHub Pages deployment.
-- [ ] Add a minimal responsive application shell and capability report.
+- [x] Choose frontend/build tooling and establish project conventions (React, TypeScript, Vite).
+- [x] Add GitHub Actions build, test, and GitHub Pages deployment workflow.
+- [x] Add a minimal responsive application shell and capability report.
 
 ## Phase 1 — Core network and inference
-- [ ] Define and validate the versioned canonical network schema.
-- [ ] Implement MLP model construction and parameter initialization.
-- [ ] Implement JavaScript inference backend.
-- [ ] Add unit tests for forward propagation, shapes, and serialization.
-- [ ] Build basic inference UI for entering inputs and inspecting outputs.
-- [ ] Add visual network graph for the initial MLP model.
-- [ ] Add code representation/editor backed by the same canonical model.
+- [x] Define and validate the versioned canonical network schema (MLP schema v1).
+- [x] Implement MLP model construction and parameter initialization.
+- [x] Implement JavaScript inference backend and activation functions.
+- [x] Add unit tests for forward propagation and parameter shape validation.
+- [x] Build basic inference UI for creating an MLP, entering inputs, and inspecting outputs.
+- [ ] Add an editable visual network graph with layer/node/weight/bias controls.
+- [ ] Add a code representation/editor backed by the same canonical model.
+- [ ] Verify the build and test workflow on GitHub Actions.
 
 ## Phase 2 — Generic Playground runtime proof
 - [ ] Finalize and document the environment module API.
