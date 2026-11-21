@@ -20,6 +20,12 @@ class FakeWorker {
     if (message.type === "start") {
       this.startMessage = message as FakeStartMessage;
       queueMicrotask(() => this.onmessage?.({
+        data: { type: "report", metrics: { step: 1 } },
+      } as MessageEvent));
+      queueMicrotask(() => this.onmessage?.({
+        data: { type: "render", view: { type: "grid", cells: [0, 1, 0] } },
+      } as MessageEvent));
+      queueMicrotask(() => this.onmessage?.({
         data: { type: "finish", result: { fitness: 0.875, metrics: { score: 7 } } },
       } as MessageEvent));
     } else if (message.type === "finish-ack") {
@@ -59,6 +65,7 @@ describe("runPlaygroundSession", () => {
       random: () => 0.5,
     });
     const reports: Record<string, unknown>[] = [];
+    const frames: unknown[] = [];
 
     const result = await runPlaygroundSession({
       source: "export async function sessionStart(ctx) {}",
@@ -66,13 +73,15 @@ describe("runPlaygroundSession", () => {
       session: { sessionId: "test", generation: 2, candidateIndex: 7, seed: 42 },
       config: { scenario: "smoke-test" },
       onReport: (metrics) => reports.push(metrics),
+      onRender: (view) => frames.push(view),
     });
 
     expect(worker?.startMessage?.network.id).toBe("candidate-7");
     expect(worker?.startMessage?.session.candidateIndex).toBe(7);
     expect(result).toEqual({ fitness: 0.875, metrics: { score: 7 } });
     expect(worker?.terminated).toBe(true);
-    expect(reports).toEqual([]);
+    expect(reports).toEqual([{ step: 1 }]);
+    expect(frames).toEqual([{ type: "grid", cells: [0, 1, 0] }]);
   });
 
   it("rejects when the environment ends without submitting fitness", async () => {
