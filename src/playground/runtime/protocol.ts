@@ -8,6 +8,7 @@ export type WorkerRequest =
       network: MLPNetwork;
       session: PlaygroundSessionMetadata;
       config: Record<string, unknown>;
+      renderEnabled: boolean;
     }
   | { type: "finish-ack" }
   | { type: "cancel"; reason: string };
