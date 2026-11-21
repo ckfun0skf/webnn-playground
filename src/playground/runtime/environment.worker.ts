@@ -15,6 +15,7 @@ type IncomingMessage =
   | { type: "cancel"; reason: string };
 type OutgoingMessage =
   | { type: "report"; metrics: Record<string, unknown> }
+  | { type: "render"; view: unknown }
   | { type: "finish"; result: PlaygroundSessionResult }
   | { type: "cleanup-complete" }
   | { type: "incomplete" }
@@ -96,6 +97,9 @@ async function runSession(message: StartMessage): Promise<void> {
           throw new Error("report() expects a metrics object.");
         }
         scope.postMessage({ type: "report", metrics });
+      },
+      render(view: unknown): void {
+        scope.postMessage({ type: "render", view });
       },
       random: createSeededRandom(message.session.seed),
       yield: () => new Promise<void>((resolve) => setTimeout(resolve, 0)),
