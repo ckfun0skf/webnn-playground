@@ -22,6 +22,14 @@ describe("neuroevolution genetics", () => {
     expect(candidate.layers.map((layer) => layer.activation)).toEqual(["tanh", "linear"]);
   });
 
+  it("creates repeatable parameter sets and layer identifiers from the same seed", () => {
+    const template = createTemplate();
+    const first = createRandomNetwork(template, "repeatable", createSeededRandom(123));
+    const second = createRandomNetwork(template, "repeatable", createSeededRandom(123));
+
+    expect(first).toEqual(second);
+  });
+
   it("performs deterministic crossover for a fixed seed", () => {
     const template = createTemplate();
     const parentA = createRandomNetwork(template, "a", createSeededRandom(1));
