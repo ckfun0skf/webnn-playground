@@ -776,13 +776,4 @@ function NetworkLibrary({
     </section>
   );
 }
-function ComingSoon({ icon: Icon, title, description }: { icon: typeof BrainCircuit; title: string; description: string }) {
-  return (
-    <section className="panel coming-soon">
-      <div className="coming-icon"><Icon size={22} /></div>
-      <span className="coming-tag">PLANNED</span>
-      <h2>{title}</h2>
-      <p>{description}</p>
-    </section>
-  );
-}
+
