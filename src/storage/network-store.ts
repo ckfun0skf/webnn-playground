@@ -79,8 +79,12 @@ export async function saveNetwork(
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       };
-      store.put(next);
-      resolve(next);
+      try {
+        store.put(next);
+        resolve(next);
+      } catch (error) {
+        reject(error);
+      }
     };
     existingRequest.onerror = () => reject(existingRequest.error ?? new Error("Unable to save network."));
   });
