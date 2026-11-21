@@ -23,6 +23,7 @@ The roadmap is organized around working vertical slices. The generic Playground 
 - [x] Define and document the initial environment module API.
 - [x] Implement Worker message protocol and session lifecycle.
 - [x] Implement inference requests from environment code to the active candidate network.
+- [x] Add a generic `ctx.render(view)` channel for environment-defined visualization snapshots.
 - [x] Implement finish, fitness, metrics, cancellation, timeout, and error handling.
 - [ ] Add a tiny non-game end-to-end environment test.
 - [x] Implement deterministic seeded random values and unit tests.
