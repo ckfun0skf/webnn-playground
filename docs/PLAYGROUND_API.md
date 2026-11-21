@@ -60,7 +60,7 @@ Options:
 - `signal`: optional AbortSignal for cancellation.
 - `onReport`: optional callback for progress metrics.
 
-The runner compiles the candidate network on the host side and services inference requests from the Worker. The environment never receives the model parameters or a direct reference to the host predictor.
+The environment and candidate network both execute inside the dedicated Worker. The Worker compiles the candidate model and exposes only the `ctx.network.predict(input)` function to the environment module; the main UI thread receives progress reports and the final result. This keeps repeated inference off the UI thread.
 
 ## Lifecycle and failure behavior
 
