@@ -2,6 +2,8 @@ import { useMemo, useRef, useState } from "react";
 import { createMLP, updateLayerParameters, type MLPNetwork } from "./core/model";
 import { compileMLP } from "./core/engine";
 import { runPlaygroundSession } from "./playground/runtime";
+import { DEFAULT_NEUROEVOLUTION_CONFIG, runNeuroevolution } from "./training/neuroevolution";
+import type { CandidateEvaluation, GenerationSummary, NeuroevolutionConfig } from "./training/neuroevolution";
 import {
   Activity,
   BrainCircuit,
@@ -39,6 +41,7 @@ export default function App() {
   const [workspace, setWorkspace] = useState<Workspace>("network");
   const [projectName] = useState("Untitled experiment");
   const [network, setNetwork] = useState<MLPNetwork | null>(null);
+  const [environmentSource, setEnvironmentSource] = useState(DEFAULT_ENVIRONMENT_CODE);
   const [inputText, setInputText] = useState("0, 0, 0");
   const [prediction, setPrediction] = useState<number[] | null>(null);
   const [inferenceError, setInferenceError] = useState<string | null>(null);
@@ -113,8 +116,8 @@ export default function App() {
         </div>
 
         {workspace === "network" && <NetworkOverview network={network} setNetwork={setNetwork} inputText={inputText} setInputText={setInputText} prediction={prediction} setPrediction={setPrediction} inferenceError={inferenceError} setInferenceError={setInferenceError} />}
-        {workspace === "training" && <ComingSoon icon={Activity} title="Training Studio" description="Train networks with supervised learning and neuroevolution. Training runs, candidate evaluation, and fitness history will live here." />}
-        {workspace === "playground" && <PlaygroundOverview network={network} setNetwork={setNetwork} />}
+        {workspace === "training" && <TrainingStudio network={network} setNetwork={setNetwork} environmentSource={environmentSource} setWorkspace={setWorkspace} />}
+        {workspace === "playground" && <PlaygroundOverview network={network} setNetwork={setNetwork} source={environmentSource} setSource={setEnvironmentSource} />}
         {workspace === "library" && <ComingSoon icon={FolderOpen} title="Network Library" description="Saved networks and selected evolution candidates will be available here, ready to reload into inference or a Playground." />}
       </main>
     </div>
@@ -345,14 +348,175 @@ export async function sessionEnd(ctx, result) {
   // Optional cleanup after a successful evaluation.
 }`;
 
-function PlaygroundOverview({
+function TrainingStudio({
   network,
   setNetwork,
+  environmentSource,
+  setWorkspace,
 }: {
   network: MLPNetwork | null;
   setNetwork: (network: MLPNetwork | null) => void;
+  environmentSource: string;
+  setWorkspace: (workspace: Workspace) => void;
 }) {
-  const [source, setSource] = useState(DEFAULT_ENVIRONMENT_CODE);
+  const [config, setConfig] = useState<NeuroevolutionConfig>({ ...DEFAULT_NEUROEVOLUTION_CONFIG });
+  const [status, setStatus] = useState<"idle" | "running" | "completed" | "failed" | "cancelled">("idle");
+  const [best, setBest] = useState<CandidateEvaluation | null>(null);
+  const [history, setHistory] = useState<GenerationSummary[]>([]);
+  const [events, setEvents] = useState<{ generation: number; candidateIndex: number; fitness: number; error?: string }[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const updateNumber = (key: keyof NeuroevolutionConfig, value: number) => {
+    if (!Number.isFinite(value)) return;
+    setConfig((current) => {
+      if (key === "populationSize") {
+        return { ...current, populationSize: value, eliteCount: Math.min(current.eliteCount, Math.max(1, value - 1)) };
+      }
+      return { ...current, [key]: value };
+    });
+  };
+
+  const startTraining = async () => {
+    const activeNetwork = network ?? createMLP({
+      name: "Neuroevolution seed network",
+      inputSize: 2,
+      layers: [{ units: 2, activation: "softmax" }],
+    });
+    if (!network) setNetwork(activeNetwork);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setStatus("running");
+    setBest(null);
+    setHistory([]);
+    setEvents([]);
+    setError(null);
+
+    try {
+      const outputSize = activeNetwork.layers[activeNetwork.layers.length - 1].units;
+      const result = await runNeuroevolution({
+        initialNetwork: activeNetwork,
+        environmentSource,
+        config,
+        configForEnvironment: { inputSize: activeNetwork.inputSize, outputSize },
+        signal: controller.signal,
+        onCandidate: (candidate) => {
+          setEvents((current) => [...current, {
+            generation: candidate.generation,
+            candidateIndex: candidate.candidateIndex,
+            fitness: candidate.fitness,
+            error: candidate.error,
+          }]);
+          setBest((current) => !current || candidate.fitness > current.fitness ? candidate : current);
+        },
+        onGeneration: (summary) => setHistory((current) => [...current, summary]),
+      });
+      setBest(result.best);
+      setStatus("completed");
+    } catch (trainingError) {
+      setError(trainingError instanceof Error ? trainingError.message : String(trainingError));
+      setStatus(controller.signal.aborted ? "cancelled" : "failed");
+    } finally {
+      abortRef.current = null;
+    }
+  };
+
+  const cancelTraining = () => abortRef.current?.abort("Training cancelled by user.");
+
+  return (
+    <div className="training-studio">
+      <section className="panel training-config-panel">
+        <div className="panel-heading">
+          <div><div className="panel-kicker">TRAINING ALGORITHM</div><h2>Neuroevolution</h2></div>
+          <span className="model-chip">GENETIC ALGORITHM</span>
+        </div>
+        <div className="training-config-body">
+          <p className="training-description">Evaluate candidate networks inside your JavaScript Playground. Fitness is calculated by the environment; the evolution engine handles selection, crossover, mutation, and generations.</p>
+          <div className="training-config-grid">
+            <label>Population size<input type="number" min="2" max="500" value={config.populationSize} onChange={(event) => updateNumber("populationSize", event.target.valueAsNumber)} /></label>
+            <label>Generations<input type="number" min="1" max="1000" value={config.generations} onChange={(event) => updateNumber("generations", event.target.valueAsNumber)} /></label>
+            <label>Elite count<input type="number" min="1" max={Math.max(1, config.populationSize - 1)} value={config.eliteCount} onChange={(event) => updateNumber("eliteCount", event.target.valueAsNumber)} /></label>
+            <label>Tournament size<input type="number" min="1" max="100" value={config.tournamentSize} onChange={(event) => updateNumber("tournamentSize", event.target.valueAsNumber)} /></label>
+            <label>Mutation rate<input type="number" min="0" max="1" step="0.01" value={config.mutationRate} onChange={(event) => updateNumber("mutationRate", event.target.valueAsNumber)} /></label>
+            <label>Mutation scale<input type="number" min="0" step="0.01" value={config.mutationScale} onChange={(event) => updateNumber("mutationScale", event.target.valueAsNumber)} /></label>
+            <label>Crossover rate<input type="number" min="0" max="1" step="0.01" value={config.crossoverRate} onChange={(event) => updateNumber("crossoverRate", event.target.valueAsNumber)} /></label>
+            <label>Random seed<input type="number" step="1" value={config.seed} onChange={(event) => updateNumber("seed", event.target.valueAsNumber)} /></label>
+          </div>
+          <div className="training-environment-link">
+            <div><span className="panel-kicker">ENVIRONMENT SOURCE</span><strong>{environmentSource.trim() ? "Custom Playground code is ready" : "No environment code"}</strong></div>
+            <button className="text-button" onClick={() => setWorkspace("playground")}><Code2 size={13} /> Edit environment</button>
+          </div>
+          <div className="training-actions">
+            {status === "running" ? (
+              <button className="secondary-button" onClick={cancelTraining}>Cancel training</button>
+            ) : (
+              <button className="primary-button" onClick={startTraining} disabled={!environmentSource.trim()}><Play size={14} /> Start evolution</button>
+            )}
+            <span className="training-status"><span className={`status-dot ${status === "running" || status === "completed" ? "good" : status === "failed" ? "warn" : "neutral"}`} />{status}</span>
+          </div>
+          {error && <div className="environment-error">{error}</div>}
+        </div>
+      </section>
+
+      <div className="training-results-grid">
+        <section className="panel training-progress-panel">
+          <div className="panel-heading compact"><div className="panel-kicker">GENERATION HISTORY</div><span>{history.length} / {config.generations}</span></div>
+          {history.length === 0 ? <p className="empty-logs">Generation statistics will appear after the first population has been evaluated.</p> : (
+            <div className="generation-list">
+              {history.map((entry) => (
+                <div className="generation-row" key={entry.generation}>
+                  <strong>Gen {entry.generation + 1}</strong>
+                  <span>Best {entry.bestFitness.toFixed(5)}</span>
+                  <span>Mean {entry.meanFitness.toFixed(5)}</span>
+                  <span>{entry.failedEvaluations} failed</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+        <section className="panel best-candidate-panel">
+          <div className="panel-kicker">BEST CANDIDATE</div>
+          {best ? (
+            <>
+              <strong className="best-fitness">{best.fitness.toFixed(7)}</strong>
+              <p>Generation {best.generation + 1} · Candidate {best.candidateIndex + 1}</p>
+              <button className="primary-button full-button" onClick={() => { setNetwork(best.network); setWorkspace("network"); }}><BrainCircuit size={14} /> Load best network</button>
+            </>
+          ) : <p className="empty-logs">The best-performing network will appear here.</p>}
+        </section>
+      </div>
+
+      <section className="panel candidate-history-panel">
+        <div className="panel-heading compact"><div className="panel-kicker">CANDIDATE EVALUATIONS</div><span>{events.length} evaluated</span></div>
+        {events.length === 0 ? <p className="empty-logs">Individual fitness results will appear here.</p> : (
+          <div className="candidate-table">
+            <div className="candidate-table-header"><span>Generation</span><span>Candidate</span><span>Fitness</span><span>Status</span></div>
+            {events.slice(-30).reverse().map((event, index) => (
+              <div className="candidate-table-row" key={`${event.generation}-${event.candidateIndex}-${index}`}>
+                <span>{event.generation + 1}</span><span>{event.candidateIndex + 1}</span>
+                <span>{event.error ? "—" : event.fitness.toFixed(6)}</span>
+                <span className={event.error ? "candidate-failed" : "candidate-ok"}>{event.error ? "FAILED" : "OK"}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function PlaygroundOverview({
+  network,
+  setNetwork,
+  source,
+  setSource,
+}: {
+  network: MLPNetwork | null;
+  setNetwork: (network: MLPNetwork | null) => void;
+  source: string;
+  setSource: (source: string) => void;
+}) {
   const [status, setStatus] = useState<"idle" | "running" | "completed" | "failed" | "cancelled">("idle");
   const [result, setResult] = useState<{ fitness: number; metrics?: Record<string, unknown> } | null>(null);
   const [logs, setLogs] = useState<Record<string, unknown>[]>([]);
