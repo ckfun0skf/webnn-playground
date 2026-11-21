@@ -15,7 +15,7 @@ The roadmap is organized around working vertical slices. The generic Playground 
 - [x] Implement JavaScript inference backend and activation functions.
 - [x] Add unit tests for forward propagation and parameter shape validation.
 - [x] Build basic inference UI for creating an MLP, entering inputs, and inspecting outputs.
-- [ ] Add an editable visual network graph with layer/node/weight/bias controls.
+- [x] Add an editable visual network graph with layer/node/weight/bias/activation controls.
 - [ ] Add a code representation/editor backed by the same canonical model.
 - [ ] Verify the build and test workflow on GitHub Actions.
 
