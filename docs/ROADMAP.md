@@ -27,7 +27,7 @@ The roadmap is organized around working vertical slices. The generic Playground 
 - [ ] Add a tiny non-game end-to-end environment test.
 - [x] Implement deterministic seeded random values and unit tests.
 - [ ] Verify session isolation and repeatable seeded runs in a browser.
-- [ ] Add a basic environment code editor and runtime logs.
+- [x] Add a basic environment code editor and runtime logs.
 
 ## Phase 3 — Neuroevolution
 - [ ] Implement population initialization.
