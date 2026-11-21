@@ -408,7 +408,7 @@ function TrainingStudio({
       if (key === "populationSize") {
         return { ...current, populationSize: value, eliteCount: Math.min(current.eliteCount, Math.max(1, value - 1)) };
       }
-      return { ...current, [key]: value };
+      return { ...current, [key]: value } as NeuroevolutionConfig;
     });
   };
 
@@ -659,7 +659,7 @@ function PlaygroundOverview({
             <span className={`status-dot ${status === "completed" ? "good" : status === "failed" ? "warn" : status === "running" ? "good" : "neutral"}`} />
             <strong>{status === "idle" ? "Ready to run" : status === "running" ? "Running session" : status === "completed" ? "Session completed" : status === "cancelled" ? "Session cancelled" : "Session failed"}</strong>
           </div>
-          {status === "running" && <p>Environment code is executing in a dedicated Worker. Network inference is handled by the JavaScript backend.</p>}
+          {status === "running" && <p>Environment code is executing in a dedicated Worker. Network inference runs in the Worker using the JavaScript backend.</p>}
           {error && <div className="environment-error">{error}</div>}
           {result && (
             <div className="fitness-result">
