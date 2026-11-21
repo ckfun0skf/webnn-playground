@@ -151,7 +151,7 @@ Failure paths:
 
 ### 4.4 Runtime isolation and trust
 
-User code must execute outside the main UI thread. The initial runtime should use dedicated Web Workers and a message protocol with explicit request IDs for inference, reports, finish, and cancellation.
+User code must execute outside the main UI thread. The initial runtime should use dedicated Web Workers and a message protocol with explicit request IDs for reports, finish acknowledgement, and cancellation. Network inference runs inside the environment Worker so repeated predictions do not block the UI thread.
 
 Worker isolation protects UI responsiveness and limits accidental access to application state. It is not a complete security sandbox for hostile JavaScript. Do not market arbitrary user code as safely sandboxed. Before enabling execution of code from untrusted users or shared public environments, evaluate stronger isolation (for example, a separately-originated sandboxed frame with a restrictive policy) and document remaining risks.
 
