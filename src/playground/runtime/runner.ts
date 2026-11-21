@@ -40,6 +40,7 @@ export function runPlaygroundSession(
 
     const cleanup = () => {
       clearTimeout(timeout);
+      if (cancellationTimer) clearTimeout(cancellationTimer);
       options.signal?.removeEventListener("abort", onAbort);
       worker.terminate();
       URL.revokeObjectURL(workerUrl);
@@ -52,7 +53,12 @@ export function runPlaygroundSession(
       reject(error);
     };
 
-    const onAbort = () => fail(new Error(options.signal?.reason?.toString() ?? "Session cancelled."));
+    let cancellationTimer: ReturnType<typeof setTimeout> | undefined;
+    const cancellationError = () => new Error(options.signal?.reason?.toString() ?? "Session cancelled.");
+    const onAbort = () => {
+      worker.postMessage({ type: "cancel", reason: cancellationError().message } satisfies WorkerRequest);
+      cancellationTimer = setTimeout(() => fail(cancellationError()), 500);
+    };
     const timeout = setTimeout(() => fail(new Error(`Session timed out after ${timeoutMs}ms.`)), timeoutMs);
 
     if (options.signal?.aborted) {
@@ -93,6 +99,8 @@ export function runPlaygroundSession(
         finishReceived = true;
         sessionResult = message.result;
         worker.postMessage({ type: "finish-ack" } satisfies WorkerRequest);
+      } else if (message.type === "cancelled") {
+        fail(cancellationError());
       } else if (message.type === "incomplete") {
         fail(new Error("Environment session ended without calling finish()."));
       } else if (message.type === "error") {
