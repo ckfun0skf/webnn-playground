@@ -30,7 +30,6 @@ const scope = self as unknown as WorkerScope;
 let activeController: AbortController | null = null;
 let pendingFinishResolve: (() => void) | null = null;
 let finishAckPromise: Promise<void> | null = null;
-let finishResult: PlaygroundSessionResult | null = null;
 let sessionRunning = false;
 
 function serializeError(error: unknown): { message: string; stack?: string } {
@@ -69,7 +68,7 @@ async function runSession(message: StartMessage): Promise<void> {
       throw new Error("Environment must export sessionStart(context).");
     }
 
-    finishResult = null;
+    let sessionResult: PlaygroundSessionResult | null = null;
     finishAckPromise = new Promise((resolve) => {
       pendingFinishResolve = resolve;
     });
@@ -84,11 +83,11 @@ async function runSession(message: StartMessage): Promise<void> {
         },
       },
       finish(result: PlaygroundSessionResult): Promise<void> {
-        if (finishResult) throw new Error("finish() may only be called once.");
+        if (sessionResult) throw new Error("finish() may only be called once.");
         if (!result || typeof result.fitness !== "number" || !Number.isFinite(result.fitness)) {
           throw new Error("finish() requires a finite numeric fitness value.");
         }
-        finishResult = result;
+        sessionResult = result;
         scope.postMessage({ type: "finish", result });
         return finishAckPromise!;
       },
@@ -107,14 +106,15 @@ async function runSession(message: StartMessage): Promise<void> {
 
     await environment.sessionStart(context);
 
-    if (!finishResult) {
+    const completedResult = sessionResult;
+    if (!completedResult) {
       scope.postMessage({ type: controller.signal.aborted ? "cancelled" : "incomplete" });
       return;
     }
 
     await finishAckPromise;
     if (typeof environment.sessionEnd === "function") {
-      await environment.sessionEnd(context, finishResult);
+      await environment.sessionEnd(context, completedResult);
     }
     scope.postMessage({ type: "cleanup-complete" });
   } catch (error) {
@@ -128,7 +128,6 @@ async function runSession(message: StartMessage): Promise<void> {
     activeController = null;
     pendingFinishResolve = null;
     finishAckPromise = null;
-    finishResult = null;
     sessionRunning = false;
   }
 }
