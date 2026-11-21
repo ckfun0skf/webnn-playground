@@ -35,6 +35,7 @@ See [Playground API](docs/PLAYGROUND_API.md) for the environment contract and [A
 
 - `createMLP(options)`: create a validated MLP with initialized parameters.
 - `updateLayerParameters(network, layerId, update)`: immutably update layer weights, biases, or activation.
+- `appendDenseLayer(network, units)`, `resizeLayerUnits(network, layerId, units)`, and `removeLastDenseLayer(network)`: edit MLP architecture while preserving valid tensor shapes.
 - `validateNetwork(network)`: inspect schema and parameter-shape errors.
 - `compileMLP(network)`: compile a reusable JavaScript forward-pass predictor.
 - `runPlaygroundSession(options)`: execute a user-authored environment in a Worker with network inference, progress reporting, visualization events, fitness collection, cancellation, and timeout handling.
