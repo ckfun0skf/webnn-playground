@@ -51,9 +51,10 @@ The roadmap is organized around working vertical slices. The generic Playground 
 - [x] Keep Snake-specific rules out of the neuroevolution engine.
 
 ## Phase 5 — Persistence and project workspace
-- [ ] Add IndexedDB persistence for projects, environments, and networks.
+- [ ] Add IndexedDB persistence for projects, environments, and datasets.
+- [x] Add IndexedDB persistence for saved networks.
 - [ ] Add versioned JSON import/export.
-- [ ] Add Network Library and saved candidate management.
+- [x] Add Network Library and saved candidate management.
 - [ ] Add multiple projects/tabs and unsaved-change handling.
 - [ ] Add project bundle export/import.
 
