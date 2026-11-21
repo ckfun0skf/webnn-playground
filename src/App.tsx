@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createMLP, updateLayerParameters, type MLPNetwork } from "./core/model";
 import { compileMLP } from "./core/engine";
+import { runPlaygroundSession } from "./playground/runtime";
 import {
   Activity,
   BrainCircuit,
@@ -113,7 +114,7 @@ export default function App() {
 
         {workspace === "network" && <NetworkOverview network={network} setNetwork={setNetwork} inputText={inputText} setInputText={setInputText} prediction={prediction} setPrediction={setPrediction} inferenceError={inferenceError} setInferenceError={setInferenceError} />}
         {workspace === "training" && <ComingSoon icon={Activity} title="Training Studio" description="Train networks with supervised learning and neuroevolution. Training runs, candidate evaluation, and fitness history will live here." />}
-        {workspace === "playground" && <PlaygroundOverview />}
+        {workspace === "playground" && <PlaygroundOverview network={network} setNetwork={setNetwork} />}
         {workspace === "library" && <ComingSoon icon={FolderOpen} title="Network Library" description="Saved networks and selected evolution candidates will be available here, ready to reload into inference or a Playground." />}
       </main>
     </div>
@@ -304,37 +305,170 @@ function NetworkOverview({
   );
 }
 
-function PlaygroundOverview() {
+const DEFAULT_ENVIRONMENT_CODE = `export async function sessionStart(ctx) {
+  const inputSize = Number(ctx.config.inputSize);
+  const outputSize = Number(ctx.config.outputSize);
+  let totalError = 0;
+
+  // This example evaluates the network on three generated observations.
+  for (let step = 0; step < 3; step += 1) {
+    if (ctx.signal.aborted) return;
+
+    const input = Array.from(
+      { length: inputSize },
+      (_, index) => index === step % inputSize ? 1 : 0
+    );
+    const target = Array.from(
+      { length: outputSize },
+      (_, index) => index === step % outputSize ? 1 : 0
+    );
+
+    const output = await ctx.network.predict(input);
+    const error = output.reduce(
+      (sum, value, index) => sum + (value - target[index]) ** 2,
+      0
+    );
+
+    totalError += error;
+    ctx.report({ step: step + 1, error, totalError });
+    await ctx.yield();
+  }
+
+  await ctx.finish({
+    fitness: 1 / (1 + totalError),
+    metrics: { totalError, observations: 3 }
+  });
+}
+
+export async function sessionEnd(ctx, result) {
+  // Optional cleanup after a successful evaluation.
+}`;
+
+function PlaygroundOverview({
+  network,
+  setNetwork,
+}: {
+  network: MLPNetwork | null;
+  setNetwork: (network: MLPNetwork | null) => void;
+}) {
+  const [source, setSource] = useState(DEFAULT_ENVIRONMENT_CODE);
+  const [status, setStatus] = useState<"idle" | "running" | "completed" | "failed">("idle");
+  const [result, setResult] = useState<{ fitness: number; metrics?: Record<string, unknown> } | null>(null);
+  const [logs, setLogs] = useState<Record<string, unknown>[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const runEnvironment = async () => {
+    const activeNetwork = network ?? createMLP({
+      name: "Playground sample network",
+      inputSize: 2,
+      layers: [{ units: 2, activation: "softmax" }],
+    });
+    if (!network) setNetwork(activeNetwork);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setStatus("running");
+    setResult(null);
+    setError(null);
+    setLogs([]);
+
+    try {
+      const outputSize = activeNetwork.layers[activeNetwork.layers.length - 1].units;
+      const sessionResult = await runPlaygroundSession({
+        source,
+        network: activeNetwork,
+        session: {
+          sessionId: `playground-${Date.now()}`,
+          generation: 0,
+          candidateIndex: 0,
+          seed: 42,
+        },
+        config: { inputSize: activeNetwork.inputSize, outputSize },
+        timeoutMs: 30_000,
+        signal: controller.signal,
+        onReport: (metrics) => setLogs((current) => [...current, metrics]),
+      });
+      setResult(sessionResult);
+      setStatus("completed");
+    } catch (runError) {
+      setError(runError instanceof Error ? runError.message : String(runError));
+      setStatus("failed");
+    } finally {
+      abortRef.current = null;
+    }
+  };
+
+  const cancelEnvironment = () => abortRef.current?.abort("Cancelled by user.");
+
   return (
-    <div className="playground-layout">
-      <section className="panel playground-intro">
-        <div className="intro-icon"><FlaskConical size={22} /></div>
-        <div className="panel-kicker">GENERIC SIMULATION FRAMEWORK</div>
-        <h2>Your environment. Your rules. Your neural network.</h2>
-        <p>Write JavaScript to define a simulation. The Playground runtime manages sessions, connects the current candidate network, and collects fitness for neuroevolution.</p>
-        <div className="contract-preview">
-          <div className="code-line"><span className="code-purple">export async function</span> <span className="code-yellow">sessionStart</span>(ctx) {"{"}</div>
-          <div className="code-line indent"><span className="code-muted">// Ask the current network for an action</span></div>
-          <div className="code-line indent"><span className="code-purple">const</span> action = <span className="code-purple">await</span> ctx.network.predict(observation);</div>
-          <div className="code-line indent">...</div>
-          <div className="code-line indent">ctx.finish({"{"} fitness, metrics {"}"});</div>
-          <div className="code-line">{"}"}</div>
+    <div className="playground-editor-layout">
+      <section className="panel environment-editor-panel">
+        <div className="panel-heading">
+          <div><div className="panel-kicker">CUSTOM ENVIRONMENT</div><h2>Environment module</h2></div>
+          <span className="model-chip">JAVASCRIPT · ES MODULE</span>
         </div>
-        <button className="primary-button"><Code2 size={15} /> Create environment</button>
+        <div className="environment-editor-meta">
+          <span>Exports <code>sessionStart(ctx)</code> and optional <code>sessionEnd(ctx, result)</code></span>
+          <span>{source.split("\n").length} lines</span>
+        </div>
+        <textarea
+          className="environment-code"
+          spellCheck={false}
+          value={source}
+          onChange={(event) => setSource(event.target.value)}
+          aria-label="Environment JavaScript source code"
+        />
+        <div className="environment-editor-footer">
+          <div className="selected-network-label">
+            <BrainCircuit size={14} />
+            <span>{network ? network.name : "A sample 2 → 2 MLP will be created on first run"}</span>
+          </div>
+          <div className="environment-actions">
+            {status === "running" ? (
+              <button className="secondary-button" onClick={cancelEnvironment}>Cancel session</button>
+            ) : (
+              <button className="primary-button" onClick={runEnvironment} disabled={!source.trim()}><Play size={14} /> Run environment</button>
+            )}
+          </div>
+        </div>
       </section>
-      <section className="panel templates-panel">
-        <div className="panel-heading"><div><div className="panel-kicker">START WITH AN EXAMPLE</div><h2>Environment templates</h2></div><span className="coming-tag">IN DEVELOPMENT</span></div>
-        <div className="template-card">
-          <div className="template-art snake-art"><span className="snake-cell" /><span className="snake-cell" /><span className="snake-cell" /><span className="food-cell" /></div>
-          <div className="template-copy"><strong>Snake</strong><p>Train an agent to navigate, collect food, and avoid collisions.</p><span>NEUROEVOLUTION · GRID SIMULATION</span></div>
-          <button className="small-icon-button" aria-label="Open Snake template"><Play size={15} /></button>
-        </div>
-        <div className="template-card">
-          <div className="template-art abstract-art"><span /><span /><span /><span /></div>
-          <div className="template-copy"><strong>Minimal environment</strong><p>A tiny reference simulation for learning the environment API.</p><span>STARTER · CUSTOM CODE</span></div>
-          <button className="small-icon-button" aria-label="Open starter template"><Play size={15} /></button>
-        </div>
-      </section>
+
+      <aside className="environment-results-column">
+        <section className="panel environment-status-panel">
+          <div className="panel-kicker">SESSION STATUS</div>
+          <div className="session-status-line">
+            <span className={`status-dot ${status === "completed" ? "good" : status === "failed" ? "warn" : status === "running" ? "good" : "neutral"}`} />
+            <strong>{status === "idle" ? "Ready to run" : status === "running" ? "Running session" : status === "completed" ? "Session completed" : "Session failed"}</strong>
+          </div>
+          {status === "running" && <p>Environment code is executing in a dedicated Worker. Network inference is handled by the JavaScript backend.</p>}
+          {error && <div className="environment-error">{error}</div>}
+          {result && (
+            <div className="fitness-result">
+              <span>FITNESS SCORE</span>
+              <strong>{result.fitness.toFixed(6)}</strong>
+              <small>{JSON.stringify(result.metrics ?? {})}</small>
+            </div>
+          )}
+        </section>
+        <section className="panel environment-log-panel">
+          <div className="panel-heading compact"><div className="panel-kicker">ENVIRONMENT REPORTS</div><span>{logs.length} events</span></div>
+          <div className="environment-logs">
+            {logs.length === 0 ? <p className="empty-logs">Progress metrics from <code>ctx.report()</code> will appear here.</p> : logs.map((entry, index) => (
+              <div className="environment-log-entry" key={index}><span>{String(entry.step ?? index + 1).padStart(2, "0")}</span><code>{JSON.stringify(entry)}</code></div>
+            ))}
+          </div>
+        </section>
+        <section className="panel context-reference-panel">
+          <div className="panel-kicker">AVAILABLE CONTEXT API</div>
+          <code>ctx.network.predict(input)</code>
+          <code>ctx.finish({"{ fitness, metrics }"})</code>
+          <code>ctx.report(metrics)</code>
+          <code>ctx.random() · ctx.yield()</code>
+          <code>ctx.signal · ctx.session · ctx.config</code>
+          <a href="https://github.com/ckfun0skf/webnn-playground/blob/main/docs/PLAYGROUND_API.md" target="_blank" rel="noreferrer">Read environment API reference ↗</a>
+        </section>
+      </aside>
     </div>
   );
 }
