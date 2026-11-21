@@ -94,17 +94,18 @@ function createNextGeneration(
   config: RunNeuroevolutionOptions["config"],
   random: () => number,
   generation: number,
+  runId: string,
 ): MLPNetwork[] {
   const next: MLPNetwork[] = ranked
     .slice(0, config.eliteCount)
     .map((candidate, index) =>
-      cloneNetwork(candidate.network, `g${generation}-elite-${index}`),
+      cloneNetwork(candidate.network, `${runId}-g${generation}-elite-${index}`),
     );
 
   while (next.length < config.populationSize) {
     const parentA = selectTournament(ranked, config.tournamentSize, random);
     const parentB = selectTournament(ranked, config.tournamentSize, random);
-    const childId = `g${generation}-candidate-${next.length}`;
+    const childId = `${runId}-g${generation}-candidate-${next.length}`;
     const crossed = random() < config.crossoverRate
       ? crossoverNetworks(parentA.network, parentB.network, childId, random)
       : cloneNetwork(parentA.network, childId);
@@ -126,17 +127,18 @@ export async function runNeuroevolution(
   validateOptions(options);
   const { config } = options;
   const random = createSeededRandom(config.seed);
+  const runId = `run-${Date.now()}-${Math.floor(Math.random() * 1_000_000).toString(36)}`;
   const evaluations: CandidateEvaluation[] = [];
   const history: GenerationSummary[] = [];
   let population: MLPNetwork[] = [];
 
   if (config.includeInitialNetwork) {
-    population.push(cloneNetwork(options.initialNetwork, "g0-seed"));
+    population.push(cloneNetwork(options.initialNetwork, `${runId}-g0-seed`));
   }
   while (population.length < config.populationSize) {
     population.push(createRandomNetwork(
       options.initialNetwork,
-      `g0-candidate-${population.length}`,
+      `${runId}-g0-candidate-${population.length}`,
       random,
     ));
   }
@@ -152,7 +154,7 @@ export async function runNeuroevolution(
       }
 
       const network = population[candidateIndex];
-      const candidateId = `g${generation}-c${candidateIndex}`;
+      const candidateId = `${runId}-g${generation}-c${candidateIndex}`;
       const seed = Math.floor(random() * 0xffffffff);
 
       let evaluation: CandidateEvaluation;
@@ -209,7 +211,7 @@ export async function runNeuroevolution(
     }
 
     if (generation < config.generations - 1) {
-      population = createNextGeneration(ranked, config, random, generation + 1);
+      population = createNextGeneration(ranked, config, random, generation + 1, runId);
     }
   }
 
