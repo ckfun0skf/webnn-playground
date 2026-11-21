@@ -331,6 +331,7 @@ const DEFAULT_ENVIRONMENT_CODE = `export async function sessionStart(ctx) {
 
     totalError += error;
     ctx.report({ step: step + 1, error, totalError });
+    ctx.render({ type: "observation", step: step + 1, input, output, target, error });
     await ctx.yield();
   }
 
@@ -355,6 +356,7 @@ function PlaygroundOverview({
   const [status, setStatus] = useState<"idle" | "running" | "completed" | "failed" | "cancelled">("idle");
   const [result, setResult] = useState<{ fitness: number; metrics?: Record<string, unknown> } | null>(null);
   const [logs, setLogs] = useState<Record<string, unknown>[]>([]);
+  const [renderedView, setRenderedView] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -372,6 +374,7 @@ function PlaygroundOverview({
     setResult(null);
     setError(null);
     setLogs([]);
+    setRenderedView(null);
 
     try {
       const outputSize = activeNetwork.layers[activeNetwork.layers.length - 1].units;
@@ -388,6 +391,7 @@ function PlaygroundOverview({
         timeoutMs: 30_000,
         signal: controller.signal,
         onReport: (metrics) => setLogs((current) => [...current, metrics]),
+        onRender: setRenderedView,
       });
       setResult(sessionResult);
       setStatus("completed");
@@ -451,6 +455,10 @@ function PlaygroundOverview({
             </div>
           )}
         </section>
+        <section className="panel environment-view-panel">
+          <div className="panel-heading compact"><div className="panel-kicker">ENVIRONMENT VIEW</div><span>{renderedView === null ? "waiting for ctx.render()" : "latest frame"}</span></div>
+          <pre>{renderedView === null ? "Environment-defined state will appear here." : JSON.stringify(renderedView, null, 2)}</pre>
+        </section>
         <section className="panel environment-log-panel">
           <div className="panel-heading compact"><div className="panel-kicker">ENVIRONMENT REPORTS</div><span>{logs.length} events</span></div>
           <div className="environment-logs">
@@ -463,7 +471,7 @@ function PlaygroundOverview({
           <div className="panel-kicker">AVAILABLE CONTEXT API</div>
           <code>ctx.network.predict(input)</code>
           <code>ctx.finish({"{ fitness, metrics }"})</code>
-          <code>ctx.report(metrics)</code>
+          <code>ctx.report(metrics) · ctx.render(view)</code>
           <code>ctx.random() · ctx.yield()</code>
           <code>ctx.signal · ctx.session · ctx.config</code>
           <a href="https://github.com/ckfun0skf/webnn-playground/blob/main/docs/PLAYGROUND_API.md" target="_blank" rel="noreferrer">Read environment API reference ↗</a>
