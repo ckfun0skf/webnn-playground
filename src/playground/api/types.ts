@@ -18,6 +18,7 @@ export interface PlaygroundEnvironmentContext {
   };
   finish(result: PlaygroundSessionResult): Promise<void>;
   report(metrics: Record<string, unknown>): void;
+  render(view: unknown): void;
   random(): number;
   yield(): Promise<void>;
   signal: AbortSignal;
@@ -41,5 +42,6 @@ export interface RunPlaygroundSessionOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
   onReport?: (metrics: Record<string, unknown>) => void;
+  onRender?: (view: unknown) => void;
 }
 
