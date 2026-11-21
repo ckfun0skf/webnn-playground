@@ -4,6 +4,7 @@ import { compileMLP } from "./core/engine";
 import { runPlaygroundSession } from "./playground/runtime";
 import { DEFAULT_NEUROEVOLUTION_CONFIG, runNeuroevolution } from "./training/neuroevolution";
 import type { CandidateEvaluation, GenerationSummary, NeuroevolutionConfig } from "./training/neuroevolution";
+import snakeEnvironmentSource from "./playground/examples/snake.environment.js?raw";
 import {
   Activity,
   BrainCircuit,
@@ -348,6 +349,39 @@ export async function sessionEnd(ctx, result) {
   // Optional cleanup after a successful evaluation.
 }`;
 
+type SnakeVisualization = {
+  type: "snake";
+  width: number;
+  height: number;
+  snake: { x: number; y: number; head?: boolean }[];
+  food: { x: number; y: number } | null;
+  score: number;
+  steps: number;
+  terminal: boolean;
+};
+
+function EnvironmentVisualization({ view }: { view: unknown }) {
+  if (view && typeof view === "object" && (view as SnakeVisualization).type === "snake") {
+    const snakeView = view as SnakeVisualization;
+    return (
+      <div className="snake-visualization">
+        <div className="snake-board" style={{ gridTemplateColumns: "repeat(" + snakeView.width + ", minmax(0, 1fr))" }}>
+          {Array.from({ length: snakeView.width * snakeView.height }, (_, index) => {
+            const x = index % snakeView.width;
+            const y = Math.floor(index / snakeView.width);
+            const segment = snakeView.snake.find((part) => part.x === x && part.y === y);
+            const isFood = snakeView.food?.x === x && snakeView.food?.y === y;
+            const cellClass = segment ? (segment.head ? "head" : "body") : isFood ? "food" : "";
+            return <div key={index} className={"snake-board-cell " + cellClass} />;
+          })}
+        </div>
+        <div className="snake-board-stats"><span>Score <strong>{snakeView.score}</strong></span><span>Steps <strong>{snakeView.steps}</strong></span><span>{snakeView.terminal ? "Finished" : "Running"}</span></div>
+      </div>
+    );
+  }
+
+  return <pre>{view === null ? "Environment-defined state will appear here." : JSON.stringify(view, null, 2)}</pre>;
+}
 function TrainingStudio({
   network,
   setNetwork,
@@ -575,7 +609,22 @@ function PlaygroundOverview({
       <section className="panel environment-editor-panel">
         <div className="panel-heading">
           <div><div className="panel-kicker">CUSTOM ENVIRONMENT</div><h2>Environment module</h2></div>
-          <span className="model-chip">JAVASCRIPT · ES MODULE</span>
+          <div className="panel-tools">
+            <span className="model-chip">JAVASCRIPT · ES MODULE</span>
+            <button className="secondary-button" onClick={() => {
+              setSource(snakeEnvironmentSource);
+              setNetwork(createMLP({
+                name: "Snake agent",
+                inputSize: 11,
+                layers: [{ units: 16, activation: "relu" }, { units: 3, activation: "softmax" }],
+              }));
+              setResult(null);
+              setLogs([]);
+              setRenderedView(null);
+              setError(null);
+              setStatus("idle");
+            }}>Load Snake</button>
+          </div>
         </div>
         <div className="environment-editor-meta">
           <span>Exports <code>sessionStart(ctx)</code> and optional <code>sessionEnd(ctx, result)</code></span>
@@ -622,7 +671,7 @@ function PlaygroundOverview({
         </section>
         <section className="panel environment-view-panel">
           <div className="panel-heading compact"><div className="panel-kicker">ENVIRONMENT VIEW</div><span>{renderedView === null ? "waiting for ctx.render()" : "latest frame"}</span></div>
-          <pre>{renderedView === null ? "Environment-defined state will appear here." : JSON.stringify(renderedView, null, 2)}</pre>
+          <EnvironmentVisualization view={renderedView} />
         </section>
         <section className="panel environment-log-panel">
           <div className="panel-heading compact"><div className="panel-kicker">ENVIRONMENT REPORTS</div><span>{logs.length} events</span></div>
