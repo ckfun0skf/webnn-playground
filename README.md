@@ -37,6 +37,7 @@ See [Architecture](docs/ARCHITECTURE.md) for the proposed environment contract a
 - `updateLayerParameters(network, layerId, update)`: immutably update layer weights, biases, or activation.
 - `validateNetwork(network)`: inspect schema and parameter-shape errors.
 - `compileMLP(network)`: compile a reusable JavaScript forward-pass predictor.
+- `runPlaygroundSession(options)`: execute a user-authored environment in a Worker with network inference, fitness reporting, cancellation, and timeout handling.
 
 The Network workspace includes a first working inference path. Automated unit tests cover MLP construction, forward propagation, activation behavior, and validation.
 
