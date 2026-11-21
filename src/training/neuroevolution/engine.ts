@@ -167,6 +167,7 @@ export async function runNeuroevolution(
           fitness: result.fitness, metrics: result.metrics,
         };
         evaluations.push(evaluation);
+        if (!best || evaluation.fitness > best.fitness) best = evaluation;
         options.onCandidate?.(evaluation);
         return evaluation;
       } catch (error) {
@@ -179,6 +180,7 @@ export async function runNeuroevolution(
           error: error instanceof Error ? error.message : String(error),
         };
         evaluations.push(evaluation);
+        if (!best || evaluation.fitness > best.fitness) best = evaluation;
         options.onCandidate?.(evaluation);
         return evaluation;
       }
