@@ -40,7 +40,7 @@ See [Playground API](docs/PLAYGROUND_API.md) for the environment contract and [A
 - `runPlaygroundSession(options)`: execute a user-authored environment in a Worker with network inference, progress reporting, visualization events, fitness collection, cancellation, and timeout handling.
 - `runNeuroevolution(options)`: evaluate populations and evolve candidate MLPs through the generic Playground contract.
 
-The Network workspace includes a first working inference path with editable layer weights, biases, and activation functions. The Playground workspace includes a JavaScript environment editor wired to the Worker session runtime, progress reports, cancellation, and fitness output. Automated unit tests cover MLP construction, forward propagation, activation behavior, validation, seeded randomness, and Worker bootstrap syntax.
+The Network workspace includes a first working inference path with editable layer weights, biases, and activation functions. The Playground workspace includes a JavaScript environment editor wired to the Worker session runtime, progress reports, cancellation, and fitness output. Automated unit tests cover MLP construction, forward propagation, activation behavior, validation, seeded randomness, genetic operators, generation orchestration, and Worker session lifecycle.
 
 ## Documentation
 
