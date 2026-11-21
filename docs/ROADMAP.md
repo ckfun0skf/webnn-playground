@@ -41,12 +41,13 @@ The roadmap is organized around working vertical slices. The generic Playground 
 - [ ] Validate the engine end-to-end with the non-game environment in a browser.
 
 ## Phase 4 — Snake as a built-in Playground
-- [ ] Implement Snake as a normal environment module using the public contract.
-- [ ] Add a visual board renderer driven by environment state/events.
-- [ ] Add Snake-specific configuration and fitness metrics.
-- [ ] Train Snake agents through the generic neuroevolution engine.
+- [x] Implement Snake as a normal environment module using the public contract.
+- [x] Add a grid board renderer driven by generic `ctx.render(view)` events.
+- [x] Add Snake score, step count, and terminal-state fitness metrics.
+- [ ] Add configurable board/rules/fitness parameters.
+- [ ] Validate Snake training through the generic neuroevolution engine in a browser.
 - [ ] Select, save, reload, and run a trained Snake network independently.
-- [ ] Confirm there is no Snake-specific path inside the evolution engine.
+- [x] Keep Snake-specific rules out of the neuroevolution engine.
 
 ## Phase 5 — Persistence and project workspace
 - [ ] Add IndexedDB persistence for projects, environments, and networks.
