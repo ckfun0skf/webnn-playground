@@ -29,7 +29,7 @@ The intended lifecycle is:
 4. The environment ends the session and reports fitness plus optional metrics.
 5. The engine records the result and continues with the population/generation.
 
-See [Architecture](docs/ARCHITECTURE.md) for the proposed environment contract and runtime boundaries.
+See [Playground API](docs/PLAYGROUND_API.md) for the environment contract and [Architecture](docs/ARCHITECTURE.md) for runtime boundaries.
 
 ## Current core APIs
 
@@ -45,6 +45,7 @@ The Network workspace includes a first working inference path. Automated unit te
 
 - [Product Requirements](docs/PRD.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [Playground Environment API](docs/PLAYGROUND_API.md)
 - [Roadmap](docs/ROADMAP.md)
 
 ## Deployment
@@ -53,4 +54,4 @@ The application must be deployable to GitHub Pages without a backend server. Use
 
 ## Current implementation
 
-The repository now contains the initial React + TypeScript + Vite workspace shell, responsive navigation, browser capability indicators, and a GitHub Pages deployment workflow. The network editor, training engine, generic Playground runtime, and persistence are not implemented yet.
+The repository now contains the React + TypeScript + Vite workspace shell, an initial MLP model and JavaScript inference engine, a basic interactive inference view, and a Worker-based generic Playground session runner. Neuroevolution orchestration, the full visual network editor, environment code editor, persistence, and WebNN execution are still pending.
