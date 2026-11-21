@@ -12,4 +12,5 @@ export type WorkerMessage =
   | { type: "finish"; result: PlaygroundSessionResult }
   | { type: "cleanup-complete" }
   | { type: "incomplete" }
+  | { type: "cancelled" }
   | { type: "error"; message: string; stack?: string };
