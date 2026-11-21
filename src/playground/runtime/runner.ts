@@ -1,17 +1,14 @@
-import { compileMLP } from "../../core/engine";
 import type {
   PlaygroundSessionResult,
   RunPlaygroundSessionOptions,
 } from "../api/types";
 import type { WorkerMessage, WorkerRequest } from "./protocol";
-import { PLAYGROUND_WORKER_SOURCE } from "./worker-bootstrap";
 
-function createWorker(): { worker: Worker; url: string } {
-  const url = URL.createObjectURL(
-    new Blob([PLAYGROUND_WORKER_SOURCE], { type: "text/javascript" }),
+function createWorker(): Worker {
+  return new Worker(
+    new URL("./environment.worker.ts", import.meta.url),
+    { type: "module", name: "playground-environment" },
   );
-  const worker = new Worker(url, { type: "module", name: "playground-environment" });
-  return { worker, url };
 }
 
 export function runPlaygroundSession(
@@ -24,18 +21,12 @@ export function runPlaygroundSession(
     return Promise.reject(new Error("Environment source cannot be empty."));
   }
 
-  let predictor: ReturnType<typeof compileMLP>;
-  try {
-    predictor = compileMLP(options.network);
-  } catch (error) {
-    return Promise.reject(error);
-  }
-
   return new Promise((resolve, reject) => {
-    const { worker, url: workerUrl } = createWorker();
+    const worker = createWorker();
     let settled = false;
     let finishReceived = false;
     let sessionResult: PlaygroundSessionResult | null = null;
+    let cancellationTimer: ReturnType<typeof setTimeout> | undefined;
     const timeoutMs = options.timeoutMs ?? 30_000;
 
     const cleanup = () => {
@@ -43,7 +34,6 @@ export function runPlaygroundSession(
       if (cancellationTimer) clearTimeout(cancellationTimer);
       options.signal?.removeEventListener("abort", onAbort);
       worker.terminate();
-      URL.revokeObjectURL(workerUrl);
     };
 
     const fail = (error: Error) => {
@@ -53,13 +43,19 @@ export function runPlaygroundSession(
       reject(error);
     };
 
-    let cancellationTimer: ReturnType<typeof setTimeout> | undefined;
-    const cancellationError = () => new Error(options.signal?.reason?.toString() ?? "Session cancelled.");
+    const cancellationError = () =>
+      new Error(options.signal?.reason?.toString() ?? "Session cancelled.");
     const onAbort = () => {
-      worker.postMessage({ type: "cancel", reason: cancellationError().message } satisfies WorkerRequest);
+      worker.postMessage({
+        type: "cancel",
+        reason: cancellationError().message,
+      } satisfies WorkerRequest);
       cancellationTimer = setTimeout(() => fail(cancellationError()), 500);
     };
-    const timeout = setTimeout(() => fail(new Error(`Session timed out after ${timeoutMs}ms.`)), timeoutMs);
+    const timeout = setTimeout(
+      () => fail(new Error(`Session timed out after ${timeoutMs}ms.`)),
+      timeoutMs,
+    );
 
     if (options.signal?.aborted) {
       fail(cancellationError());
@@ -67,21 +63,11 @@ export function runPlaygroundSession(
     }
     options.signal?.addEventListener("abort", onAbort, { once: true });
 
-    worker.onerror = (event) => fail(new Error(event.message || "Environment worker failed."));
+    worker.onerror = (event) =>
+      fail(new Error(event.message || "Environment worker failed."));
     worker.onmessage = (event: MessageEvent<WorkerMessage>) => {
       const message = event.data;
-      if (message.type === "predict") {
-        try {
-          const output = predictor(message.input);
-          worker.postMessage({ type: "infer-result", requestId: message.requestId, output } satisfies WorkerRequest);
-        } catch (error) {
-          worker.postMessage({
-            type: "infer-result",
-            requestId: message.requestId,
-            error: error instanceof Error ? error.message : String(error),
-          } satisfies WorkerRequest);
-        }
-      } else if (message.type === "report") {
+      if (message.type === "report") {
         try {
           options.onReport?.(message.metrics);
         } catch (error) {
@@ -119,6 +105,7 @@ export function runPlaygroundSession(
     worker.postMessage({
       type: "start",
       source: options.source,
+      network: options.network,
       session: options.session,
       config: options.config ?? {},
     } satisfies WorkerRequest);
