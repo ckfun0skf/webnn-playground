@@ -260,3 +260,9 @@ h1 { margin: 0; font-size: 25px; font-weight: 600; letter-spacing: -.7px; }
   .environment-code { min-height: 390px; }
   .environment-editor-footer { align-items: flex-start; flex-direction: column; }
 }
+
+
+.environment-view-panel { padding: 0 14px 12px; }
+.environment-view-panel .panel-heading { padding: 13px 0; }
+.environment-view-panel .panel-heading > span { color: #798290; font: 8px var(--mono); }
+.environment-view-panel pre { max-height: 220px; margin: 0; padding: 10px; overflow: auto; color: #aeb8c7; background: #11141a; border: 1px solid #2b303b; border-radius: 5px; font: 8px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
