@@ -6,13 +6,12 @@ import type {
 import type { WorkerMessage, WorkerRequest } from "./protocol";
 import { PLAYGROUND_WORKER_SOURCE } from "./worker-bootstrap";
 
-function createWorker(): Worker {
+function createWorker(): { worker: Worker; url: string } {
   const url = URL.createObjectURL(
     new Blob([PLAYGROUND_WORKER_SOURCE], { type: "text/javascript" }),
   );
   const worker = new Worker(url, { type: "module", name: "playground-environment" });
-  URL.revokeObjectURL(url);
-  return worker;
+  return { worker, url };
 }
 
 export function runPlaygroundSession(
@@ -33,7 +32,7 @@ export function runPlaygroundSession(
   }
 
   return new Promise((resolve, reject) => {
-    const worker = createWorker();
+    const { worker, url: workerUrl } = createWorker();
     let settled = false;
     let finishReceived = false;
     let sessionResult: PlaygroundSessionResult | null = null;
@@ -43,6 +42,7 @@ export function runPlaygroundSession(
       clearTimeout(timeout);
       options.signal?.removeEventListener("abort", onAbort);
       worker.terminate();
+      URL.revokeObjectURL(workerUrl);
     };
 
     const fail = (error: Error) => {
