@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { createMLP, type MLPNetwork } from "./core/model";
+import { compileMLP } from "./core/engine";
 import {
   Activity,
   BrainCircuit,
@@ -35,6 +37,10 @@ function detectCapabilities() {
 export default function App() {
   const [workspace, setWorkspace] = useState<Workspace>("network");
   const [projectName] = useState("Untitled experiment");
+  const [network, setNetwork] = useState<MLPNetwork | null>(null);
+  const [inputText, setInputText] = useState("0, 0, 0");
+  const [prediction, setPrediction] = useState<number[] | null>(null);
+  const [inferenceError, setInferenceError] = useState<string | null>(null);
   const capabilities = useMemo(detectCapabilities, []);
 
   return (
@@ -105,7 +111,7 @@ export default function App() {
           </div>
         </div>
 
-        {workspace === "network" && <NetworkOverview />}
+        {workspace === "network" && <NetworkOverview network={network} setNetwork={setNetwork} inputText={inputText} setInputText={setInputText} prediction={prediction} setPrediction={setPrediction} inferenceError={inferenceError} setInferenceError={setInferenceError} />}
         {workspace === "training" && <ComingSoon icon={Activity} title="Training Studio" description="Train networks with supervised learning and neuroevolution. Training runs, candidate evaluation, and fitness history will live here." />}
         {workspace === "playground" && <PlaygroundOverview />}
         {workspace === "library" && <ComingSoon icon={FolderOpen} title="Network Library" description="Saved networks and selected evolution candidates will be available here, ready to reload into inference or a Playground." />}
@@ -123,51 +129,124 @@ function getSubtitle(workspace: Workspace) {
   }
 }
 
-function NetworkOverview() {
+function NetworkOverview({
+  network,
+  setNetwork,
+  inputText,
+  setInputText,
+  prediction,
+  setPrediction,
+  inferenceError,
+  setInferenceError,
+}: {
+  network: MLPNetwork | null;
+  setNetwork: (network: MLPNetwork | null) => void;
+  inputText: string;
+  setInputText: (value: string) => void;
+  prediction: number[] | null;
+  setPrediction: (value: number[] | null) => void;
+  inferenceError: string | null;
+  setInferenceError: (value: string | null) => void;
+}) {
+  const createNetwork = () => {
+    const next = createMLP({
+      name: "My first MLP",
+      inputSize: 3,
+      layers: [{ units: 4, activation: "relu" }, { units: 2, activation: "softmax" }],
+    });
+    setNetwork(next);
+    setInputText("0, 0, 0");
+    setPrediction(null);
+    setInferenceError(null);
+  };
+
+  const runInference = () => {
+    if (!network) return;
+    try {
+      const values = inputText.split(",").map((part) => Number(part.trim()));
+      setPrediction(compileMLP(network)(values));
+      setInferenceError(null);
+    } catch (error) {
+      setPrediction(null);
+      setInferenceError(error instanceof Error ? error.message : "Inference failed.");
+    }
+  };
+
   return (
     <div className="content-grid">
       <section className="panel network-panel">
         <div className="panel-heading">
-          <div><div className="panel-kicker">MODEL CANVAS</div><h2>Network architecture</h2></div>
-          <div className="panel-tools"><span className="model-chip">MLP</span><button className="small-icon-button" aria-label="More options"><Settings2 size={15} /></button></div>
+          <div><div className="panel-kicker">MODEL CANVAS</div><h2>{network ? network.name : "Network architecture"}</h2></div>
+          <div className="panel-tools"><span className="model-chip">MLP</span><button className="small-icon-button" title="Model options" aria-label="Model options"><Settings2 size={15} /></button></div>
         </div>
         <div className="empty-canvas">
           <div className="canvas-grid" />
-          <div className="network-placeholder">
-            <div className="layer-column">
-              <span className="layer-label">INPUT</span>
-              {[0, 1, 2].map((n) => <span className="neuron input-neuron" key={n}>{["x₁", "x₂", "x₃"][n]}</span>)}
+          {network ? (
+            <div className="live-network">
+              <div className="layer-column">
+                <span className="layer-label">INPUT · {network.inputSize}</span>
+                {Array.from({ length: network.inputSize }, (_, n) => <span className="neuron input-neuron" key={n}>x{n + 1}</span>)}
+              </div>
+              {network.layers.map((layer, layerIndex) => (
+                <div className="live-layer-group" key={layer.id}>
+                  <div className="connection-lines"><span /><span /><span /><span /><span /><span /><span /><span /><span /></div>
+                  <div className="layer-column">
+                    <span className="layer-label">{layerIndex === network.layers.length - 1 ? "OUTPUT" : "HIDDEN"} · {layer.units}</span>
+                    {Array.from({ length: layer.units }, (_, n) => <span className={`neuron ${layerIndex === network.layers.length - 1 ? "output-neuron" : "hidden-neuron"}`} key={n}>{layerIndex === network.layers.length - 1 ? `y${n + 1}` : `h${n + 1}`}</span>)}
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="connection-lines"><span /><span /><span /><span /><span /><span /><span /><span /><span /></div>
-            <div className="layer-column">
-              <span className="layer-label">HIDDEN</span>
-              {[0, 1, 2, 3].map((n) => <span className="neuron hidden-neuron" key={n}>h{n + 1}</span>)}
+          ) : (
+            <div className="network-placeholder">
+              <div className="layer-column"><span className="layer-label">INPUT</span>{[0, 1, 2].map((n) => <span className="neuron input-neuron" key={n}>{["x₁", "x₂", "x₃"][n]}</span>)}</div>
+              <div className="connection-lines"><span /><span /><span /><span /><span /><span /><span /><span /><span /></div>
+              <div className="layer-column"><span className="layer-label">HIDDEN</span>{[0, 1, 2, 3].map((n) => <span className="neuron hidden-neuron" key={n}>h{n + 1}</span>)}</div>
+              <div className="connection-lines"><span /><span /><span /><span /><span /><span /><span /><span /><span /></div>
+              <div className="layer-column"><span className="layer-label">OUTPUT</span>{[0, 1].map((n) => <span className="neuron output-neuron" key={n}>y{n + 1}</span>)}</div>
             </div>
-            <div className="connection-lines"><span /><span /><span /><span /><span /><span /><span /><span /><span /></div>
-            <div className="layer-column">
-              <span className="layer-label">OUTPUT</span>
-              {[0, 1].map((n) => <span className="neuron output-neuron" key={n}>y{n + 1}</span>)}
-            </div>
-          </div>
-          <div className="canvas-empty-caption"><Sparkles size={13} /> Your network canvas will become editable here</div>
+          )}
+          {!network && <div className="canvas-empty-caption"><Sparkles size={13} /> Create a network to inspect its live architecture</div>}
         </div>
         <div className="canvas-toolbar">
           <span><span className="legend-dot input" /> Input <span className="legend-dot hidden" /> Hidden <span className="legend-dot output" /> Output</span>
-          <span>Canvas · 100%</span>
+          <span>{network ? `${network.inputSize} → ${network.layers.map((layer) => layer.units).join(" → ")}` : "Canvas · 100%"}</span>
         </div>
+        {network && (
+          <div className="model-details">
+            <div className="model-detail-heading"><strong>Layer parameters</strong><span>{network.layers.length} dense layers</span></div>
+            {network.layers.map((layer, index) => (
+              <div className="layer-detail" key={layer.id}>
+                <div><strong>Layer {index + 1}</strong><span>{layer.units} units · {layer.activation}</span></div>
+                <small>{layer.weights.length * layer.weights[0].length} weights · {layer.biases.length} biases</small>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <aside className="right-column">
         <section className="panel quick-panel">
-          <div className="panel-kicker">GET STARTED</div>
-          <h2>Create your first network</h2>
-          <p>Start with a simple multilayer perceptron. Add layers, configure neurons, and inspect weights and biases.</p>
-          <button className="primary-button full-button"><Plus size={15} /> Create MLP network</button>
-          <button className="secondary-button full-button"><Code2 size={15} /> Open network code</button>
+          <div className="panel-kicker">{network ? "INFERENCE" : "GET STARTED"}</div>
+          <h2>{network ? "Run your network" : "Create your first network"}</h2>
+          <p>{network ? "Enter one value per input neuron, separated by commas, then execute forward propagation." : "Start with a multilayer perceptron. The network will use the same model format as training and Playground environments."}</p>
+          {!network ? (
+            <button className="primary-button full-button" onClick={createNetwork}><Plus size={15} /> Create MLP network</button>
+          ) : (
+            <>
+              <label className="field-label" htmlFor="network-input">INPUT VALUES</label>
+              <input id="network-input" className="network-input" value={inputText} onChange={(event) => setInputText(event.target.value)} />
+              <button className="primary-button full-button" onClick={runInference}><Play size={14} /> Run inference</button>
+              {inferenceError && <p className="inference-error">{inferenceError}</p>}
+              {prediction && <div className="prediction-result"><span>OUTPUT</span><strong>{prediction.map((value) => value.toFixed(5)).join(" · ")}</strong></div>}
+              <button className="secondary-button full-button" onClick={() => { setNetwork(null); setPrediction(null); setInferenceError(null); }}>Close network</button>
+            </>
+          )}
+          <button className="secondary-button full-button" onClick={createNetwork}><Code2 size={15} /> {network ? "Reset to a new MLP" : "Create example MLP"}</button>
         </section>
         <section className="panel backend-panel">
           <div className="panel-heading compact"><div className="panel-kicker">EXECUTION BACKENDS</div><Gauge size={16} /></div>
-          <div className="backend-row"><span className="backend-icon js">JS</span><div><strong>JavaScript</strong><small>Baseline · always available</small></div><span className="backend-state available">READY</span></div>
+          <div className="backend-row"><span className="backend-icon js">JS</span><div><strong>JavaScript</strong><small>Active · MLP forward pass</small></div><span className="backend-state available">READY</span></div>
           <div className="backend-row"><span className="backend-icon webnn"><Cpu size={16} /></span><div><strong>WebNN</strong><small>Optional · browser dependent</small></div><span className={`backend-state ${"ml" in navigator ? "available" : "unavailable"}`}>{ "ml" in navigator ? "DETECTED" : "UNAVAILABLE"}</span></div>
         </section>
       </aside>
