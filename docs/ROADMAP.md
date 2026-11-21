@@ -34,6 +34,7 @@ The roadmap is organized around working vertical slices. The generic Playground 
 - [x] Implement population initialization.
 - [x] Implement fitness collection and generation statistics.
 - [x] Implement tournament selection, elitism, mutation, and uniform crossover.
+- [x] Add unit tests for deterministic genetics and generation orchestration.
 - [x] Add configurable population, generation, and genetic-operation settings.
 - [ ] Add pause, resume, and bounded evaluation concurrency (current runner is sequential and supports cancellation).
 - [x] Add candidate fitness history and best-candidate selection in the Training Studio.
