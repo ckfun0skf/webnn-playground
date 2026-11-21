@@ -20,12 +20,13 @@ The roadmap is organized around working vertical slices. The generic Playground 
 - [ ] Verify the build and test workflow on GitHub Actions.
 
 ## Phase 2 — Generic Playground runtime proof
-- [ ] Finalize and document the environment module API.
-- [ ] Implement Worker message protocol and session lifecycle.
-- [ ] Implement inference requests from environment code to the active candidate network.
-- [ ] Implement finish, fitness, metrics, cancellation, timeout, and error handling.
-- [ ] Add a tiny non-game test environment.
-- [ ] Verify session isolation and repeatable seeded runs.
+- [x] Define and document the initial environment module API.
+- [x] Implement Worker message protocol and session lifecycle.
+- [x] Implement inference requests from environment code to the active candidate network.
+- [x] Implement finish, fitness, metrics, cancellation, timeout, and error handling.
+- [ ] Add a tiny non-game end-to-end environment test.
+- [x] Implement deterministic seeded random values and unit tests.
+- [ ] Verify session isolation and repeatable seeded runs in a browser.
 - [ ] Add a basic environment code editor and runtime logs.
 
 ## Phase 3 — Neuroevolution
