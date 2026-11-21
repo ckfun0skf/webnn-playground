@@ -116,6 +116,7 @@ export function runPlaygroundSession(
         session: options.session,
         config: options.config ?? {},
         renderEnabled: Boolean(options.onRender),
+        reportEnabled: Boolean(options.onReport),
       } satisfies WorkerRequest);
     } catch (error) {
       fail(error instanceof Error ? error : new Error(String(error)));
