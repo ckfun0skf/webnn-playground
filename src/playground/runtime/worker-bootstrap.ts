@@ -1,6 +1,8 @@
 export const PLAYGROUND_WORKER_SOURCE = `
 let activeController;
 let pendingFinishResolve;
+let finishAckPromise;
+let finishResult;
 let finished = false;
 
 function serializeError(error) {
@@ -30,6 +32,8 @@ self.addEventListener("message", async (event) => {
 
     activeController = new AbortController();
     finished = false;
+    finishResult = undefined;
+    finishAckPromise = new Promise((resolve) => { pendingFinishResolve = resolve; });
     let requestId = 0;
     const pendingPredictions = new Map();
 
@@ -50,8 +54,9 @@ self.addEventListener("message", async (event) => {
           return Promise.reject(new Error("finish() requires a finite numeric fitness value."));
         }
         finished = true;
+        finishResult = result;
         self.postMessage({ type: "finish", result });
-        return new Promise((resolve) => { pendingFinishResolve = resolve; });
+        return finishAckPromise;
       },
       report(metrics) {
         if (!metrics || typeof metrics !== "object" || Array.isArray(metrics)) {
@@ -94,16 +99,10 @@ self.addEventListener("message", async (event) => {
       return;
     }
 
-    await new Promise((resolve) => {
-      if (!pendingFinishResolve) resolve();
-      else {
-        const previousResolve = pendingFinishResolve;
-        pendingFinishResolve = () => { previousResolve(); resolve(); };
-      }
-    });
+    await finishAckPromise;
 
     if (typeof environment.sessionEnd === "function") {
-      await environment.sessionEnd(context, message.__result);
+      await environment.sessionEnd(context, finishResult);
     }
     self.postMessage({ type: "cleanup-complete" });
   } catch (error) {
