@@ -266,3 +266,41 @@ h1 { margin: 0; font-size: 25px; font-weight: 600; letter-spacing: -.7px; }
 .environment-view-panel .panel-heading { padding: 13px 0; }
 .environment-view-panel .panel-heading > span { color: #798290; font: 8px var(--mono); }
 .environment-view-panel pre { max-height: 220px; margin: 0; padding: 10px; overflow: auto; color: #aeb8c7; background: #11141a; border: 1px solid #2b303b; border-radius: 5px; font: 8px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+
+.training-studio { display: flex; flex-direction: column; gap: 15px; }
+.training-config-panel { overflow: hidden; }
+.training-config-body { padding: 17px; }
+.training-description { max-width: 850px; margin: 0 0 17px; color: #929aa7; font-size: 11px; line-height: 1.6; }
+.training-config-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.training-config-grid label { display: flex; flex-direction: column; gap: 6px; color: #8c95a3; font-size: 9px; }
+.training-config-grid input { width: 100%; height: 32px; padding: 0 9px; color: #d2d7e0; background: #11141a; border: 1px solid #343b47; border-radius: 5px; font: 10px var(--mono); }
+.training-config-grid input:focus { outline: none; border-color: #8f80df; }
+.training-environment-link { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 17px; padding: 12px; background: #1b1f27; border: 1px solid #303641; border-radius: 6px; }
+.training-environment-link > div { display: flex; flex-direction: column; gap: 5px; }
+.training-environment-link strong { color: #c4cad4; font-size: 10px; font-weight: 500; }
+.training-actions { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+.training-status { display: inline-flex; align-items: center; gap: 7px; color: #8b94a2; font: 9px var(--mono); text-transform: uppercase; }
+.training-results-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(230px, .6fr); gap: 15px; }
+.training-progress-panel, .best-candidate-panel, .candidate-history-panel { padding: 0 15px 12px; }
+.training-progress-panel .panel-heading, .candidate-history-panel .panel-heading { padding: 13px 0; }
+.training-progress-panel .panel-heading > span, .candidate-history-panel .panel-heading > span { color: #7f8795; font: 8px var(--mono); }
+.generation-list { display: flex; flex-direction: column; max-height: 260px; overflow: auto; }
+.generation-row { display: grid; grid-template-columns: 65px 1fr 1fr 65px; gap: 9px; padding: 9px 0; border-top: 1px solid #292e38; color: #939baa; font: 8px var(--mono); }
+.generation-row strong { color: #c4c9d3; font-weight: 500; }
+.best-candidate-panel { padding-top: 15px; }
+.best-fitness { display: block; margin-top: 13px; color: #8de0b3; font: 23px var(--mono); }
+.best-candidate-panel p { margin: 6px 0 13px; color: #8992a0; font-size: 9px; }
+.candidate-table { max-height: 360px; overflow: auto; }
+.candidate-table-header, .candidate-table-row { display: grid; grid-template-columns: 1fr 1fr 1.4fr .8fr; gap: 10px; padding: 8px 4px; border-top: 1px solid #292e38; color: #929aa7; font: 8px var(--mono); }
+.candidate-table-header { color: #6f7886; border-top: 0; }
+.candidate-ok { color: #6cc99b; }
+.candidate-failed { color: #e58b8b; }
+@media (max-width: 1050px) {
+  .training-config-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .training-config-grid { grid-template-columns: 1fr 1fr; }
+  .training-results-grid { grid-template-columns: 1fr; }
+  .generation-row { grid-template-columns: 55px 1fr 1fr 55px; font-size: 7px; }
+}
