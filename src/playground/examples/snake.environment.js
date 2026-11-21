@@ -1,0 +1,142 @@
+const WIDTH = 12;
+const HEIGHT = 12;
+const MAX_STEPS = 500;
+const DIRECTIONS = [
+  { x: 0, y: -1 },
+  { x: 1, y: 0 },
+  { x: 0, y: 1 },
+  { x: -1, y: 0 },
+];
+
+function sameCell(a, b) {
+  return a.x === b.x && a.y === b.y;
+}
+
+function randomFood(ctx, snake) {
+  const empty = [];
+  for (let y = 0; y < HEIGHT; y += 1) {
+    for (let x = 0; x < WIDTH; x += 1) {
+      const cell = { x, y };
+      if (!snake.some((segment) => sameCell(segment, cell))) empty.push(cell);
+    }
+  }
+  if (empty.length === 0) return null;
+  return empty[Math.floor(ctx.random() * empty.length)];
+}
+
+function nextDirection(direction, action) {
+  if (action === 1) return (direction + 1) % 4;
+  if (action === 2) return (direction + 3) % 4;
+  return direction;
+}
+
+function isDangerous(head, direction, snake) {
+  const vector = DIRECTIONS[direction];
+  const next = { x: head.x + vector.x, y: head.y + vector.y };
+  if (next.x < 0 || next.x >= WIDTH || next.y < 0 || next.y >= HEIGHT) return 1;
+  return snake.some((segment) => sameCell(segment, next)) ? 1 : 0;
+}
+
+function observe(snake, direction, food) {
+  const head = snake[0];
+  const right = (direction + 1) % 4;
+  const left = (direction + 3) % 4;
+  return [
+    isDangerous(head, direction, snake),
+    isDangerous(head, right, snake),
+    isDangerous(head, left, snake),
+    ...DIRECTIONS.map((_, index) => index === direction ? 1 : 0),
+    food.x < head.x ? 1 : 0,
+    food.x > head.x ? 1 : 0,
+    food.y < head.y ? 1 : 0,
+    food.y > head.y ? 1 : 0,
+  ];
+}
+
+function argmax(values) {
+  let bestIndex = 0;
+  for (let index = 1; index < values.length; index += 1) {
+    if (values[index] > values[bestIndex]) bestIndex = index;
+  }
+  return bestIndex;
+}
+
+function render(ctx, snake, food, score, steps, direction, terminal) {
+  ctx.render({
+    type: "snake",
+    width: WIDTH,
+    height: HEIGHT,
+    snake: snake.map((segment, index) => ({
+      ...segment,
+      head: index === 0,
+    })),
+    food,
+    score,
+    steps,
+    direction,
+    terminal,
+  });
+}
+
+export async function sessionStart(ctx) {
+  let snake = [
+    { x: 6, y: 6 },
+    { x: 5, y: 6 },
+    { x: 4, y: 6 },
+  ];
+  let direction = 1;
+  let food = randomFood(ctx, snake);
+  let score = 0;
+  let steps = 0;
+  let terminal = false;
+
+  render(ctx, snake, food, score, steps, direction, terminal);
+
+  while (!terminal && steps < MAX_STEPS && !ctx.signal.aborted) {
+    const observation = observe(snake, direction, food);
+    const actionValues = await ctx.network.predict(observation);
+    direction = nextDirection(direction, argmax(actionValues));
+
+    const vector = DIRECTIONS[direction];
+    const nextHead = {
+      x: snake[0].x + vector.x,
+      y: snake[0].y + vector.y,
+    };
+    const eating = sameCell(nextHead, food);
+    const bodyToCheck = eating ? snake : snake.slice(0, -1);
+    const hitWall =
+      nextHead.x < 0 || nextHead.x >= WIDTH ||
+      nextHead.y < 0 || nextHead.y >= HEIGHT;
+    const hitBody = bodyToCheck.some((segment) => sameCell(segment, nextHead));
+
+    steps += 1;
+    if (hitWall || hitBody) {
+      terminal = true;
+    } else {
+      snake = [nextHead, ...snake];
+      if (eating) {
+        score += 1;
+        food = randomFood(ctx, snake);
+        if (!food) terminal = true;
+      } else {
+        snake.pop();
+      }
+    }
+
+    ctx.report({ score, steps, terminal });
+    render(ctx, snake, food, score, steps, direction, terminal);
+    await ctx.yield();
+  }
+
+  if (ctx.signal.aborted) return;
+
+  const fitness = score * 100 + steps * 0.1;
+  await ctx.finish({
+    fitness,
+    metrics: { score, steps, terminal },
+  });
+}
+
+export async function sessionEnd(ctx, result) {
+  // No external resources need cleanup for this environment.
+}
