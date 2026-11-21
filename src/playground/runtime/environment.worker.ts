@@ -9,6 +9,7 @@ type StartMessage = {
   session: PlaygroundSessionMetadata;
   config: Record<string, unknown>;
   renderEnabled: boolean;
+  reportEnabled: boolean;
 };
 type IncomingMessage =
   | StartMessage
@@ -97,7 +98,7 @@ async function runSession(message: StartMessage): Promise<void> {
         if (!metrics || typeof metrics !== "object" || Array.isArray(metrics)) {
           throw new Error("report() expects a metrics object.");
         }
-        scope.postMessage({ type: "report", metrics });
+        if (message.reportEnabled) scope.postMessage({ type: "report", metrics });
       },
       render(view: unknown): void {
         if (message.renderEnabled) scope.postMessage({ type: "render", view });
