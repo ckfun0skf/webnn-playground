@@ -34,7 +34,7 @@ function detectCapabilities() {
 
 export default function App() {
   const [workspace, setWorkspace] = useState<Workspace>("network");
-  const [projectName, setProjectName] = useState("Untitled experiment");
+  const [projectName] = useState("Untitled experiment");
   const capabilities = useMemo(detectCapabilities, []);
 
   return (
