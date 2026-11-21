@@ -346,3 +346,22 @@ h1 { margin: 0; font-size: 25px; font-weight: 600; letter-spacing: -.7px; }
   .model-detail-heading > div { align-items: flex-start; flex-direction: column; gap: 4px; }
   .layer-heading-controls { flex-wrap: wrap; gap: 7px; }
 }
+
+
+/* Guided first-run experience */
+.getting-started {
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  margin: -8px 0 18px; padding: 20px 22px;
+  background: linear-gradient(115deg, #211f32, #191d25 72%); border-color: #484064;
+}
+.getting-started-copy { min-width: 0; }
+.getting-started h2 { margin: 7px 0 5px; color: #e7e4f5; font-size: 17px; letter-spacing: -.3px; }
+.getting-started p { margin: 0; color: #a5a5b4; font-size: 11px; line-height: 1.55; }
+.getting-started-steps { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 13px; color: #b9bdc9; font-size: 10px; }
+.getting-started-steps span { display: inline-flex; align-items: center; gap: 6px; }
+.getting-started-steps b { display: grid; place-items: center; width: 18px; height: 18px; color: #d6ceff; background: #393252; border: 1px solid #5a507d; border-radius: 50%; font: 9px var(--mono); }
+.getting-started > .primary-button { flex: 0 0 auto; min-height: 38px; padding: 0 16px; }
+.playground-howto { display: grid; gap: 6px; padding: 12px 15px; background: #1c2029; border-bottom: 1px solid var(--border); color: #9da5b2; font-size: 10px; line-height: 1.5; }
+.playground-howto strong { color: #d9d4f3; font-size: 11px; }
+.playground-howto b { color: #c3b8ff; font-weight: 600; }
+@media (max-width: 760px) { .getting-started { align-items: flex-start; flex-direction: column; } }
