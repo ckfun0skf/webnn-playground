@@ -39,6 +39,7 @@ export interface RunNeuroevolutionOptions {
   configForEnvironment?: Record<string, unknown>;
   signal?: AbortSignal;
   onCandidate?: (candidate: CandidateEvaluation) => void;
+  onPopulationRender?: (generation: number, candidateIndex: number, view: unknown) => void;
   onGeneration?: (summary: GenerationSummary) => void;
 }
 
