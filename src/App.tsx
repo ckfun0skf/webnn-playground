@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { createMLP, type MLPNetwork } from "./core/model";
+import { createMLP, updateLayerParameters, type MLPNetwork } from "./core/model";
 import { compileMLP } from "./core/engine";
 import {
   Activity,
@@ -216,9 +216,59 @@ function NetworkOverview({
           <div className="model-details">
             <div className="model-detail-heading"><strong>Layer parameters</strong><span>{network.layers.length} dense layers</span></div>
             {network.layers.map((layer, index) => (
-              <div className="layer-detail" key={layer.id}>
-                <div><strong>Layer {index + 1}</strong><span>{layer.units} units · {layer.activation}</span></div>
-                <small>{layer.weights.length * layer.weights[0].length} weights · {layer.biases.length} biases</small>
+              <div className="layer-editor" key={layer.id}>
+                <div className="layer-detail">
+                  <div><strong>Layer {index + 1}</strong><span>{layer.units} units</span></div>
+                  <label className="activation-control">ACTIVATION
+                    <select
+                      value={layer.activation}
+                      onChange={(event) => {
+                        setNetwork(updateLayerParameters(network, layer.id, { activation: event.target.value as typeof layer.activation }));
+                        setPrediction(null);
+                      }}
+                    >
+                      {["linear", "relu", "tanh", "sigmoid", "softmax"].map((activation) => <option key={activation} value={activation}>{activation}</option>)}
+                    </select>
+                  </label>
+                </div>
+                {layer.weights.map((row, neuronIndex) => (
+                  <div className="parameter-row" key={neuronIndex}>
+                    <span className="parameter-neuron">N{neuronIndex + 1}</span>
+                    <div className="parameter-values">
+                      {row.map((weight, inputIndex) => (
+                        <label key={inputIndex}>W{inputIndex + 1}
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={weight}
+                            onChange={(event) => {
+                              const nextWeights = layer.weights.map((weightsRow) => [...weightsRow]);
+                              nextWeights[neuronIndex][inputIndex] = event.target.valueAsNumber;
+                              if (Number.isFinite(event.target.valueAsNumber)) {
+                                setNetwork(updateLayerParameters(network, layer.id, { weights: nextWeights }));
+                                setPrediction(null);
+                              }
+                            }}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                    <label className="parameter-bias">BIAS
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={layer.biases[neuronIndex]}
+                        onChange={(event) => {
+                          if (!Number.isFinite(event.target.valueAsNumber)) return;
+                          const nextBiases = [...layer.biases];
+                          nextBiases[neuronIndex] = event.target.valueAsNumber;
+                          setNetwork(updateLayerParameters(network, layer.id, { biases: nextBiases }));
+                          setPrediction(null);
+                        }}
+                      />
+                    </label>
+                  </div>
+                ))}
               </div>
             ))}
           </div>
