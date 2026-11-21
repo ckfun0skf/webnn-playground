@@ -540,7 +540,7 @@ function TrainingStudio({
           </div>
           <div className="playback-speed-control">
             <label htmlFor="training-speed">Population playback speed</label>
-            <input id="training-speed" type="range" min="0" max="500" step="10" value={playbackDelay} onChange={(event) => setPlaybackDelay(Number(event.target.value))} />
+            <input id="training-speed" type="range" min="0" max="500" step="10" disabled={status === "running"} value={playbackDelay} onChange={(event) => setPlaybackDelay(Number(event.target.value))} />
             <span>{playbackDelay === 0 ? "Fastest" : playbackDelay + " ms / step"}</span>
           </div>
           <div className="training-actions">
@@ -739,7 +739,7 @@ function PlaygroundOverview({
         <div className="environment-editor-footer">
           <div className="playback-speed-control playground-speed-control">
             <label htmlFor="playground-speed">Playback speed</label>
-            <input id="playground-speed" type="range" min="0" max="500" step="10" value={playbackDelay} onChange={(event) => setPlaybackDelay(Number(event.target.value))} />
+            <input id="playground-speed" type="range" min="0" max="500" step="10" disabled={status === "running"} value={playbackDelay} onChange={(event) => setPlaybackDelay(Number(event.target.value))} />
             <span>{playbackDelay === 0 ? "Fastest" : playbackDelay + " ms / step"}</span>
           </div>
           <div className="selected-network-label">
