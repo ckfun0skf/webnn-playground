@@ -803,6 +803,8 @@ function PlaygroundOverview({
   const [result, setResult] = useState<{ fitness: number; metrics?: Record<string, unknown> } | null>(null);
   const [logs, setLogs] = useState<Record<string, unknown>[]>([]);
   const [playbackDelay, setPlaybackDelay] = useState(80);
+  const [inferenceBackend, setInferenceBackend] = useState<InferenceBackend>("auto");
+  const [backendStatus, setBackendStatus] = useState("Backend will be selected when the session starts.");
   const [savedNetworks, setSavedNetworks] = useState<SavedNetworkRecord[]>([]);
   const [selectedNetworkId, setSelectedNetworkId] = useState("");
   const [showNetworkBuilder, setShowNetworkBuilder] = useState(false);
@@ -910,7 +912,9 @@ function PlaygroundOverview({
           seed: Number(playgroundParameters.find((parameter) => parameter.type === "randomSeed")?.default ?? 42),
         },
         config: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, ...Object.fromEntries(playgroundParameters.map((parameter) => [parameter.key, parameter.default])) },
+        inferenceBackend,
         signal: controller.signal,
+        onBackend: (backend) => setBackendStatus(backend.detail),
         onReport: (metrics) => setLogs((current) => [...current, metrics]),
         onRender: setRenderedView,
       });
@@ -953,7 +957,8 @@ function PlaygroundOverview({
           {savePlaygroundMessage && <span className="save-message">{savePlaygroundMessage}</span>}
           {savePlaygroundError && <span className="environment-error">{savePlaygroundError}</span>}
         </div>
-        <div className="playground-network-controls"><label>Select Network<select value={selectedNetworkId} onChange={(event) => setSelectedNetworkId(event.target.value)}><option value="">Select a compatible Network…</option>{compatibleNetworks.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><button className="secondary-button" onClick={() => setShowNetworkBuilder(true)}><Plus size={14} /> Create</button><button className="primary-button" onClick={runEnvironment} disabled={!selectedNetwork || status === "running"}><Play size={14} /> Run Environment</button></div>
+        <div className="playground-network-controls"><label>Select Network<select value={selectedNetworkId} onChange={(event) => setSelectedNetworkId(event.target.value)}><option value="">Select a compatible Network…</option>{compatibleNetworks.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Inference backend<select value={inferenceBackend} onChange={(event) => setInferenceBackend(event.target.value as InferenceBackend)} disabled={status === "running"}><option value="auto">Auto · browser chooses</option><option value="low-power">Low power · NPU preference</option><option value="high-performance">High performance · GPU preference</option><option value="webnn-cpu">WebNN · CPU preference</option><option value="javascript">JavaScript · CPU</option></select></label><button className="secondary-button" onClick={() => setShowNetworkBuilder(true)}><Plus size={14} /> Create</button><button className="primary-button" onClick={runEnvironment} disabled={!selectedNetwork || status === "running"}><Play size={14} /> Run Environment</button></div>
+        <p className="training-description">{backendStatus}</p>
         <div className="playground-step-heading">3. Write environment code</div>
         <div className="environment-editor-meta">
           <span>Exports <code>sessionStart(ctx)</code> and optional <code>sessionEnd(ctx, result)</code></span>
