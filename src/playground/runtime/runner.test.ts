@@ -142,8 +142,9 @@ describe("runPlaygroundSession", () => {
       timeoutMs: 250,
     });
 
+    const rejection = expect(result).rejects.toThrow("Session timed out after 250ms.");
     await vi.advanceTimersByTimeAsync(250);
-    await expect(result).rejects.toThrow("Session timed out after 250ms.");
+    await rejection;
     expect(worker?.terminated).toBe(true);
   });
 
