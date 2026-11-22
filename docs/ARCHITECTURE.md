@@ -162,6 +162,13 @@ No direct DOM access, application storage access, or unrestricted application ob
 
 The neuroevolution engine is independent of any particular environment.
 
+A Neural Network, a Playground, and a Training Run are separate persisted resources:
+- A Neural Network stores architecture and parameters and can be reused by multiple Playgrounds.
+- A Playground stores its source, versioned definition, input/output dimensions, and typed user parameters.
+- A Training Run stores immutable snapshots of its Playground source, initial/best networks, evolution settings, environment parameters, seeds, and results.
+
+Training selects a Playground first, then only offers networks whose input and output dimensions match the Playground definition. A completed best candidate can be saved as a new Neural Network without overwriting the source network.
+
 Responsibilities:
 - Initialize a population of candidate parameter sets compatible with one architecture.
 - Evaluate each candidate by invoking the Playground session contract.
@@ -173,7 +180,7 @@ Responsibilities:
 
 The environment must not implement population management, mutation, selection, or generation progression.
 
-Evaluation concurrency must be configurable and bounded. A first version may use sequential execution for correctness, then add bounded parallel evaluation. UI visualization should not require every simulation to run on the main thread.
+Evaluation concurrency must be configurable and bounded by the device's available resources. Each candidate runs in its own Worker; population visualization may show a large grid, while the UI should batch/coalesce render updates to avoid excessive main-thread work. The evolution seed controls selection and mutation; a separate shared environment seed ensures candidates in the same comparison cohort see identical random conditions. Playground code should use the step-budget API to guarantee termination.
 
 ## 6. Supervised learning
 
@@ -185,7 +192,7 @@ Initial supervised scope is MLP backpropagation with a small set of loss functio
 
 All project data must be locally persistable without a server.
 
-- IndexedDB for projects, environments, datasets, and saved networks.
+- IndexedDB for projects, versioned Playgrounds, training runs, datasets, and saved networks.
 - Versioned JSON for portable network/environment definitions.
 - Project export/import should use a versioned bundle format.
 - Runtime-only resources (Worker instances, WebNN contexts, compiled artifacts) must never be serialized.
