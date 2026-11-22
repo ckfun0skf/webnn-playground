@@ -4,7 +4,20 @@ This document describes the initial JavaScript environment contract implemented 
 
 ## Environment module
 
-An environment is an ES module supplied as JavaScript source. It must export `sessionStart(context)`. It may export `sessionEnd(context, result)` for cleanup.
+A Playground is an ES module supplied as JavaScript source. It must export `sessionStart(context)`; it may export `sessionEnd(context, result)`. It should also export a `playgroundDefinition` describing its stable ID, version, input/output dimensions, and user-configurable parameters. The Training workspace uses those dimensions to filter compatible Neural Networks and generates parameter controls from the definition.
+
+```js
+export const playgroundDefinition = {
+  id: "snake",
+  name: "Snake",
+  version: 1,
+  inputSize: 11,
+  outputSize: 3,
+  parameters: [
+    { key: "maxSteps", label: "Maximum steps", type: "number", default: 500, min: 1, max: 10000 }
+  ]
+};
+```
 
 ```js
 export async function sessionStart(ctx) {
@@ -43,10 +56,10 @@ A session must call `ctx.finish({ fitness, metrics? })` exactly once. The fitnes
 | `ctx.report(metrics)` | Send progress metrics to the host UI. |
 | `ctx.render(view)` | Publish an environment-defined visualization snapshot to the host UI. The view can be any structured-clone-compatible data; a renderer can interpret its shape. |
 | `ctx.random()` | Deterministic pseudo-random number based on the session seed. |
-| `ctx.yield()` | Yield to the Worker event loop. |
+| `ctx.step()` | Advance one simulation step, apply the configured playback delay, and return `false` when the configured `maxSteps` budget is reached. |\n| `ctx.yield()` | Yield to the Worker event loop without consuming a simulation step. |
 | `ctx.signal` | AbortSignal for cooperative cancellation. |
 | `ctx.session` | Read-only session metadata: ID, generation, candidate index, and seed. |
-| `ctx.config` | Read-only top-level environment configuration. |
+| `ctx.config` | Read-only Playground parameters and runtime settings. |
 
 ## Host API
 
@@ -56,7 +69,7 @@ Options:
 - `source`: complete environment ES module source.
 - `network`: validated canonical MLP network.
 - `session`: session ID, generation, candidate index, and seed.
-- `config`: optional environment configuration.
+- `config`: optional Playground parameters, including `maxSteps` and `stepDelayMs`.\n- `session.seed`: deterministic environment seed; candidates in one fair-comparison population should share this seed.
 - `timeoutMs`: optional session time limit (default 30 seconds).
 - `signal`: optional AbortSignal for cancellation.
 - `onReport`: optional callback for progress metrics.
@@ -74,7 +87,7 @@ The environment and candidate network both execute inside the dedicated Worker. 
 6. The runtime calls optional `sessionEnd(ctx, result)`.
 7. The host resolves the session promise and terminates the Worker.
 
-A missing finish call, thrown error, invalid fitness, timeout, or cancellation rejects the host promise. Worker termination prevents a stuck simulation from blocking the main UI thread.
+A missing finish call, thrown error, invalid fitness, timeout, or cancellation rejects the host promise. Environments should use `await ctx.step()` in their simulation loop to enforce a finite step budget. Fitness is entirely environment-defined; simulation steps do not automatically contribute to fitness. Worker termination prevents a stuck simulation from blocking the main UI thread.
 
 ## Trust boundary
 
