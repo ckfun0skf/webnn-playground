@@ -70,6 +70,7 @@ The JavaScript backend exposes `compileMLP(network)`, which validates and snapsh
 - Must expose capability/compilation errors clearly.
 - Must not be assumed available merely because the page is hosted over HTTPS.
 - Backend comparison must use equivalent inputs and model parameters and report timing methodology.
+- Do not promise deterministic CPU/GPU/NPU selection. The current WebNN specification abstracts the underlying device and does not expose a standardized device-enumeration or exact-device selection API. Where supported, expose the standardized power/performance preference and report only facts the browser actually exposes (for example, whether the context is accelerated), not an inferred GPU or NPU identity.
 
 The network API must not depend directly on WebNN objects. Backend adapters translate the canonical model/operation representation into backend execution.
 
