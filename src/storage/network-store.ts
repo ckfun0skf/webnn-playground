@@ -1,7 +1,7 @@
 import type { MLPNetwork } from "../core/model";
 
 const DATABASE_NAME = "webnn-playground";
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 const NETWORK_STORE = "networks";
 
 export interface SavedNetworkRecord {
@@ -26,6 +26,12 @@ function openDatabase(): Promise<IDBDatabase> {
       const database = request.result;
       if (!database.objectStoreNames.contains(NETWORK_STORE)) {
         database.createObjectStore(NETWORK_STORE, { keyPath: "id" });
+      }
+      if (!database.objectStoreNames.contains("playgrounds")) {
+        database.createObjectStore("playgrounds", { keyPath: "id" });
+      }
+      if (!database.objectStoreNames.contains("trainingRuns")) {
+        database.createObjectStore("trainingRuns", { keyPath: "id" });
       }
     };
     request.onsuccess = () => resolve(request.result);
