@@ -395,3 +395,28 @@ h1 { margin: 0; font-size: 25px; font-weight: 600; letter-spacing: -.7px; }
   .playback-speed-control { flex-wrap: wrap; min-width: 0; }
   .playground-speed-control { flex-basis: 100%; }
 }
+
+
+/* Population density, completed-agent dimming, and replay inspection */
+.population-grid-controls { display: flex; justify-content: flex-end; padding: 0 14px 10px; }
+.population-grid-controls label { display: flex; align-items: center; gap: 8px; color: #9ca5b3; font-size: 9px; }
+.population-grid-controls select { padding: 5px 8px; color: #d0d6e0; background: #151a21; border: 1px solid #343d49; border-radius: 5px; font-size: 9px; }
+.population-agent-card { display: block; width: 100%; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: opacity .16s ease, border-color .16s ease; }
+.population-agent-card:hover { border-color: #8377c8; }
+.population-agent-card.is-finished { opacity: .42; filter: saturate(.55); }
+.population-agent-card.is-finished:hover { opacity: .72; }
+.population-agent-open { display: block; margin-top: 7px; color: #8f86c8; font-size: 8px; }
+.agent-detail-backdrop { position: fixed; z-index: 50; inset: 0; display: grid; place-items: center; padding: 20px; background: #080a0dcc; backdrop-filter: blur(5px); }
+.agent-detail-modal { width: min(720px, 100%); max-height: 92vh; overflow: auto; padding: 16px; box-shadow: 0 20px 80px #0009; }
+.agent-detail-modal h2 { margin: 4px 0 0; color: #e0e3eb; font-size: 15px; }
+.agent-detail-board { display: grid; place-items: center; min-height: 280px; padding: 12px; background: #11161d; border: 1px solid #303844; border-radius: 8px; }
+.agent-detail-board .snake-board { width: min(100%, 440px); }
+.agent-replay-controls { display: flex; align-items: center; gap: 12px; margin-top: 13px; color: #9ca5b3; font: 9px var(--mono); }
+.agent-replay-controls input[type="range"] { flex: 1; min-width: 60px; accent-color: #a99bf3; }
+.agent-replay-controls .primary-button { white-space: nowrap; }
+@media (max-width: 600px) {
+  .agent-detail-backdrop { padding: 8px; }
+  .agent-detail-modal { padding: 10px; }
+  .agent-replay-controls { flex-wrap: wrap; }
+  .agent-replay-controls input[type="range"] { order: 3; flex-basis: 100%; }
+}
