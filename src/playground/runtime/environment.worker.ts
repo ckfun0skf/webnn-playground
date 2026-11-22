@@ -69,8 +69,23 @@ async function runSession(message: StartMessage): Promise<void> {
     if (message.inferenceBackend === "auto") {
       try {
         const webnnPredictor = await createWebNNPredictor(message.network);
-        predictor = webnnPredictor.predict;
         disposePredictor = webnnPredictor.dispose;
+        predictor = async (input) => {
+          try {
+            return await webnnPredictor.predict(input);
+          } catch (inferenceError) {
+            disposePredictor?.();
+            disposePredictor = undefined;
+            const cpuPredictor = compileMLP(message.network);
+            predictor = cpuPredictor;
+            scope.postMessage({
+              type: "backend",
+              backend: "javascript",
+              detail: `WebNN inference failed; switched to JavaScript CPU inference. ${inferenceError instanceof Error ? inferenceError.message : String(inferenceError)}`,
+            });
+            return cpuPredictor(input);
+          }
+        };
         scope.postMessage({ type: "backend", backend: "webnn", detail: "WebNN acceleration requested with low-power preference. The browser selects the device; NPU use is not guaranteed or exposed." });
       } catch (webnnError) {
         predictor = compileMLP(message.network);
