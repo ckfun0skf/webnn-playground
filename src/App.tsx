@@ -436,10 +436,29 @@ function TrainingStudio({
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [playbackDelay, setPlaybackDelay] = useState(80);
   const [populationViews, setPopulationViews] = useState<Record<number, { view: unknown; fitness?: number; finished?: boolean; error?: string }>>({});
+  const [populationReplays, setPopulationReplays] = useState<Record<string, unknown[]>>({});
+  const [populationColumns, setPopulationColumns] = useState(4);
+  const [selectedAgent, setSelectedAgent] = useState<{ generation: number; index: number } | null>(null);
+  const [replayFrameIndex, setReplayFrameIndex] = useState(0);
+  const [isReplaying, setIsReplaying] = useState(false);
+  const [environmentMaxSteps, setEnvironmentMaxSteps] = useState(500);
   const [activeGeneration, setActiveGeneration] = useState(0);
+
+  useEffect(() => {
+    if (!isReplaying || !selectedAgent) return;
+    const frames = populationReplays[selectedAgent.generation + "-" + selectedAgent.index] ?? [];
+    if (replayFrameIndex >= frames.length - 1) {
+      setIsReplaying(false);
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setReplayFrameIndex((index) => Math.min(index + 1, frames.length - 1));
+    }, Math.max(30, playbackDelay || 30));
+    return () => window.clearInterval(timer);
+  }, [isReplaying, selectedAgent, replayFrameIndex, playbackDelay, populationReplays]);
   const abortRef = useRef<AbortController | null>(null);
 
-  type NumericConfigKey = "populationSize" | "generations" | "eliteCount" | "tournamentSize" | "crossoverRate" | "mutationRate" | "mutationScale" | "evaluationTimeoutMs" | "seed";
+  type NumericConfigKey = "populationSize" | "generations" | "eliteCount" | "environmentSeed" | "tournamentSize" | "crossoverRate" | "mutationRate" | "mutationScale" | "evaluationTimeoutMs" | "seed";
   const updateNumber = (key: NumericConfigKey, value: number) => {
     if (!Number.isFinite(value)) return;
     setConfig((current) => {
@@ -474,7 +493,7 @@ function TrainingStudio({
         initialNetwork: activeNetwork,
         environmentSource,
         config,
-        configForEnvironment: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay },
+        configForEnvironment: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, maxSteps: environmentMaxSteps },
         signal: controller.signal,
         onCandidate: (candidate) => {
           setEvents((current) => [...current, {
@@ -497,6 +516,11 @@ function TrainingStudio({
         onPopulationRender: (generation, candidateIndex, view) => {
           setActiveGeneration(generation);
           setPopulationViews((current) => ({ ...current, [candidateIndex]: { ...current[candidateIndex], view } }));
+          const replayKey = generation + "-" + candidateIndex;
+          setPopulationReplays((current) => ({
+            ...current,
+            [replayKey]: [...(current[replayKey] ?? []), view].slice(-1200),
+          }));
         },
         onGeneration: (summary) => {
           setHistory((current) => [...current, summary]);
@@ -532,7 +556,9 @@ function TrainingStudio({
             <label>Mutation rate<input type="number" min="0" max="1" step="0.01" value={config.mutationRate} onChange={(event) => updateNumber("mutationRate", event.target.valueAsNumber)} /></label>
             <label>Mutation scale<input type="number" min="0" step="0.01" value={config.mutationScale} onChange={(event) => updateNumber("mutationScale", event.target.valueAsNumber)} /></label>
             <label>Crossover rate<input type="number" min="0" max="1" step="0.01" value={config.crossoverRate} onChange={(event) => updateNumber("crossoverRate", event.target.valueAsNumber)} /></label>
-            <label>Random seed<input type="number" step="1" value={config.seed} onChange={(event) => updateNumber("seed", event.target.valueAsNumber)} /></label>
+            <label>Evolution seed<input type="number" step="1" value={config.seed} onChange={(event) => updateNumber("seed", event.target.valueAsNumber)} /></label>
+            <label>Environment seed<input type="number" step="1" value={config.environmentSeed} onChange={(event) => updateNumber("environmentSeed", event.target.valueAsNumber)} /></label>
+            <label>Max steps per agent<input type="number" min="1" max="10000" step="1" value={environmentMaxSteps} onChange={(event) => setEnvironmentMaxSteps(Math.max(1, event.target.valueAsNumber || 1))} /></label>
           </div>
           <div className="training-environment-link">
             <div><span className="panel-kicker">ENVIRONMENT SOURCE</span><strong>{environmentSource.trim() ? "Custom Playground code is ready" : "No environment code"}</strong></div>
@@ -561,16 +587,45 @@ function TrainingStudio({
           <span>{Object.values(populationViews).filter((item) => item.finished).length} / {config.populationSize} finished</span>
         </div>
         <p className="population-live-description">Every candidate is playing its own Snake game simultaneously. Each board is driven by that candidate's neural network.</p>
-        <div className="population-board-grid">
+        <div className="population-grid-controls">
+          <label>Grid density
+            <select value={populationColumns} onChange={(event) => setPopulationColumns(Number(event.target.value))}>
+              <option value={2}>2 columns</option><option value={3}>3 columns</option><option value={4}>4 columns</option>
+              <option value={5}>5 columns</option><option value={6}>6 columns</option><option value={8}>8 columns</option>
+            </select>
+          </label>
+        </div>
+        <div className="population-board-grid" style={{ gridTemplateColumns: "repeat(" + populationColumns + ", minmax(0, 1fr))" }}>
           {Array.from({ length: config.populationSize }, (_, index) => {
             const candidate = populationViews[index];
-            return <div className="population-agent-card" key={index}>
+            return <button type="button" className={"population-agent-card " + (candidate?.finished ? "is-finished" : "")} key={index}
+              onClick={() => { setSelectedAgent({ generation: activeGeneration, index }); setReplayFrameIndex(0); setIsReplaying(false); }}>
               <div className="population-agent-heading"><strong>Agent {String(index + 1).padStart(2, "0")}</strong><span className={candidate?.error ? "candidate-failed" : candidate?.finished ? "candidate-ok" : "population-agent-running"}>{candidate?.error ? "FAILED" : candidate?.finished ? "DONE" : candidate?.view ? "PLAYING" : status === "running" ? "STARTING" : "WAITING"}</span></div>
               {candidate?.view ? <EnvironmentVisualization view={candidate.view} /> : <div className="population-board-placeholder">Waiting for first frame…</div>}
               {candidate?.finished && <div className="population-agent-fitness">Fitness <strong>{candidate.fitness?.toFixed(2) ?? "—"}</strong></div>}
-            </div>;
+              <span className="population-agent-open">{candidate?.finished ? "View · Replay available" : "View live agent"}</span>
+            </button>;
           })}
         </div>
+        {selectedAgent && (() => {
+          const key = selectedAgent.generation + "-" + selectedAgent.index;
+          const frames = populationReplays[key] ?? [];
+          const selectedCandidate = selectedAgent.generation === activeGeneration ? populationViews[selectedAgent.index] : undefined;
+          const replayView = frames[Math.min(replayFrameIndex, Math.max(0, frames.length - 1))];
+          const canReplay = Boolean(selectedCandidate?.finished || events.some((item) => item.generation === selectedAgent.generation && item.candidateIndex === selectedAgent.index));
+          return <div className="agent-detail-backdrop" role="presentation" onClick={() => { setSelectedAgent(null); setIsReplaying(false); }}>
+            <section className="panel agent-detail-modal" role="dialog" aria-modal="true" aria-label="Agent details" onClick={(event) => event.stopPropagation()}>
+              <div className="panel-heading"><div><div className="panel-kicker">AGENT DETAIL</div><h2>Generation {selectedAgent.generation + 1} · Agent {selectedAgent.index + 1}</h2></div><button className="text-button" onClick={() => { setSelectedAgent(null); setIsReplaying(false); }}>Close ×</button></div>
+              <div className="agent-detail-board"><EnvironmentVisualization view={isReplaying ? replayView : (selectedCandidate?.view ?? replayView)} /></div>
+              <div className="agent-replay-controls">
+                <span>{frames.length ? "Frame " + Math.min(replayFrameIndex + 1, frames.length) + " / " + frames.length : "No frames captured"}</span>
+                <input aria-label="Replay position" type="range" min="0" max={Math.max(0, frames.length - 1)} value={Math.min(replayFrameIndex, Math.max(0, frames.length - 1))} disabled={!canReplay || frames.length < 2 || isReplaying} onChange={(event) => setReplayFrameIndex(Number(event.target.value))} />
+                <button className="primary-button" disabled={!canReplay || frames.length < 2} onClick={() => { setReplayFrameIndex(0); setIsReplaying((value) => !value); }}>{isReplaying ? "Pause replay" : "Replay"}</button>
+              </div>
+              {!canReplay && <p className="empty-logs">Replay becomes available after this agent finishes.</p>}
+            </section>
+          </div>;
+        })()}
       </section>
       <div className="training-results-grid">
         <section className="panel training-progress-panel">
@@ -675,7 +730,7 @@ function PlaygroundOverview({
           candidateIndex: 0,
           seed: 42,
         },
-        config: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay },
+        config: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, maxSteps: 500 },
         timeoutMs: 30_000,
         signal: controller.signal,
         onReport: (metrics) => setLogs((current) => [...current, metrics]),
