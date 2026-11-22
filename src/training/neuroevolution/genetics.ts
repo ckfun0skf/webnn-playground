@@ -12,6 +12,7 @@ export function cloneNetwork(network: MLPNetwork, id: string): MLPNetwork {
     id,
     layers: network.layers.map((layer) => ({
       ...layer,
+      useBias: layer.useBias !== false,
       weights: layer.weights.map((row) => [...row]),
       biases: [...layer.biases],
     })),
@@ -33,7 +34,7 @@ export function createRandomNetwork(
     layers: template.layers.map((layer) => ({
       units: layer.units,
       activation: layer.activation,
-      useBias: layer.useBias,
+      useBias: layer.useBias !== false,
     })),
     random,
   });
@@ -51,7 +52,7 @@ export function crossoverNetworks(
     parentA.layers.some((layer, index) =>
       layer.units !== parentB.layers[index].units ||
       layer.activation !== parentB.layers[index].activation ||
-      layer.useBias !== parentB.layers[index].useBias
+      (layer.useBias !== false) !== (parentB.layers[index].useBias !== false)
     )
   ) {
     throw new Error("Crossover requires networks with identical architectures.");

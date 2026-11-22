@@ -773,6 +773,7 @@ function PlaygroundOverview({
     setPlaygroundInputSize(template.inputSize);
     setPlaygroundOutputSize(template.outputSize);
     setPlaygroundParameters(template.parameters);
+    setSelectedNetworkId("");
     setRenderedView(null);
     setResult(null); setLogs([]); setError(null); setStatus("idle");
   };
@@ -784,7 +785,7 @@ function PlaygroundOverview({
       if (!Number.isInteger(playgroundInputSize) || playgroundInputSize < 1 || !Number.isInteger(playgroundOutputSize) || playgroundOutputSize < 1) throw new Error("Input/output dimensions must be positive integers.");
       const numberValue = (key: string, fallback: number) => Number(source.match(new RegExp(key + "\\s*:\\s*(\\d+)"))?.[1] ?? fallback);
       const parameters = playgroundParameters;
-      if (!Array.isArray(parameters) || parameters.some((item) => !item || typeof item.key !== "string" || typeof item.label !== "string" || !["number", "boolean", "string", "randomSeed"].includes(item.type) || !["number", "boolean", "string"].includes(typeof item.default))) throw new Error("Parameters must be a JSON array of typed parameter definitions.");
+      if (!Array.isArray(parameters) || parameters.some((item) => !item || typeof item.key !== "string" || typeof item.label !== "string" || !["number", "boolean", "string", "randomSeed"].includes(item.type) || !["number", "boolean", "string"].includes(typeof item.default) || (item.type === "randomSeed" && !Number.isInteger(item.default)))) throw new Error("Parameters must be a JSON array of typed parameter definitions.");
       const definition: PlaygroundDefinition = {
         id: playgroundId.trim(), name: playgroundName.trim(),
         version: numberValue("version", 1),
@@ -916,11 +917,7 @@ function PlaygroundOverview({
             <span>{selectedNetwork ? selectedNetwork.name : "Select or create a compatible Network to run this Playground"}</span>
           </div>
           <div className="environment-actions">
-            {status === "running" ? (
-              <button className="secondary-button" onClick={cancelEnvironment}>Cancel session</button>
-            ) : (
-              <button className="primary-button" onClick={runEnvironment} disabled={!source.trim() || !selectedNetwork}><Play size={14} /> Run environment</button>
-            )}
+            {status === "running" && <button className="secondary-button" onClick={cancelEnvironment}>Cancel session</button>}
           </div>
         </div>
       </section>
