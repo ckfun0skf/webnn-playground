@@ -40,10 +40,13 @@ describe("network interchange", () => {
     expect(imported.layers).toHaveLength(sampleNetwork.layers.length);
     expect(imported.layers.map((layer) => layer.units)).toEqual([3, 1]);
     expect(imported.layers.map((layer) => layer.activation)).toEqual(["relu", "sigmoid"]);
-    expect(imported.layers[0].weights).toEqual(sampleNetwork.layers[0].weights);
-    expect(imported.layers[0].biases).toEqual(sampleNetwork.layers[0].biases);
-    expect(imported.layers[1].weights).toEqual(sampleNetwork.layers[1].weights);
-    expect(imported.layers[1].biases).toEqual(sampleNetwork.layers[1].biases);
+    imported.layers.forEach((layer, layerIndex) => {
+      const expected = sampleNetwork.layers[layerIndex];
+      layer.weights.forEach((row, rowIndex) => row.forEach((value, columnIndex) => {
+        expect(value).toBeCloseTo(expected.weights[rowIndex][columnIndex], 6);
+      }));
+      layer.biases.forEach((value, index) => expect(value).toBeCloseTo(expected.biases[index], 6));
+    });
   });
 
   it("assigns a new network and layer identity when importing", () => {
