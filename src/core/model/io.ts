@@ -264,7 +264,7 @@ export function downloadNetworkFile(filename: string, content: BlobPart, type: s
   anchor.href = url;
   anchor.download = filename;
   anchor.click();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function uniqueImportedNetwork(network: MLPNetwork, existingIds: Set<string>): MLPNetwork {
