@@ -4,7 +4,7 @@ import { compileMLP } from "./core/engine";
 import { runPlaygroundSession } from "./playground/runtime";
 import { DEFAULT_NEUROEVOLUTION_CONFIG, runNeuroevolution } from "./training/neuroevolution";
 import type { CandidateEvaluation, GenerationSummary, NeuroevolutionConfig } from "./training/neuroevolution";
-import snakeEnvironmentSource from "./playground/examples/snake.environment.js?raw";
+import { PLAYGROUND_TEMPLATES } from "./playground/templates";
 import { deleteSavedNetwork, listSavedNetworks, listSavedPlaygrounds, saveNetwork, savePlayground, saveTrainingRun, type SavedNetworkRecord, type SavedPlaygroundRecord } from "./storage";
 import ResourceLibrary from "./ResourceLibrary";
 import type { PlaygroundDefinition } from "./playground/api";
@@ -47,7 +47,7 @@ export default function App() {
   const [workspace, setWorkspace] = useState<Workspace>("network");
   const [projectName] = useState("Untitled experiment");
   const [network, setNetwork] = useState<MLPNetwork | null>(null);
-  const [environmentSource, setEnvironmentSource] = useState(DEFAULT_ENVIRONMENT_CODE);
+  const [environmentSource, setEnvironmentSource] = useState(PLAYGROUND_TEMPLATES[0].source);
   const [libraryRevision, setLibraryRevision] = useState(0);
   const [resourceRevision, setResourceRevision] = useState(0);
   const [inputText, setInputText] = useState("0, 0, 0");
@@ -329,51 +329,6 @@ function NetworkOverview({
     </div>
   );
 }
-
-const DEFAULT_ENVIRONMENT_CODE = `export async function sessionStart(ctx) {
-  const inputSize = Number(ctx.config.inputSize);
-  const outputSize = Number(ctx.config.outputSize);
-  let totalError = 0;
-
-  // This example evaluates the network on three generated observations.
-  for (let step = 0; step < 3; step += 1) {
-    if (ctx.signal.aborted) return;
-
-    const input = Array.from(
-      { length: inputSize },
-      (_, index) => index === step % inputSize ? 1 : 0
-    );
-    const target = Array.from(
-      { length: outputSize },
-      (_, index) => index === step % outputSize ? 1 : 0
-    );
-
-    const output = await ctx.network.predict(input);
-    const error = output.reduce(
-      (sum, value, index) => sum + (value - target[index]) ** 2,
-      0
-    );
-
-    totalError += error;
-    ctx.report({ step: step + 1, error, totalError });
-    ctx.render({ type: "observation", step: step + 1, input, output, target, error });
-    await ctx.yield();
-  }
-
-  await ctx.finish({
-    fitness: 1 / (1 + totalError),
-    metrics: { totalError, observations: 3 }
-  });
-}
-
-export async function sessionEnd(ctx, result) {
-  // Optional cleanup after a successful evaluation.
-}`;
-
-const PLAYGROUND_TEMPLATES = [
-  { id: "blank", name: "Blank Playground", inputSize: 3, outputSize: 2, parameters: [], source: DEFAULT_ENVIRONMENT_CODE },
-  { id: "snake", name: "Snake Simulation", inputSize: 11, outputSize: 3, parameters: [{ key: "maxSteps", label: "Maximum steps", type: "number", default: 500, min: 1, max: 10000, step: 100, description: "Maximum simulation steps." }], source: snakeEnvironmentSource, network: { name: "Snake agent", inputSize: 11, layers: [{ units: 16, activation: "relu" as const }, { units: 3, activation: "softmax" as const }] } },
-];
 
 type GridVisualization = {
   type: "grid";
