@@ -69,6 +69,11 @@ function attributeInteger(node: any, name: string, fallback: number): number {
   return attribute ? Number(attribute.i) : fallback;
 }
 
+function attributeFloat(node: any, name: string, fallback: number): number {
+  const attribute = (node.attribute ?? []).find((item: any) => item.name === name);
+  return attribute ? Number(attribute.f) : fallback;
+}
+
 function graphInputSize(graph: any, initializerNames: Set<string>, fallback: number): number {
   const inputs = (graph.input ?? []).filter((input: any) => !initializerNames.has(input.name));
   if (inputs.length !== 1) throw new Error("Only ONNX models with exactly one non-initializer input are supported.");
@@ -96,18 +101,12 @@ export function importOnnxNetwork(bytes: Uint8Array, filename = "Imported ONNX n
   const tensors = tensorMap(graph);
   const layers: DenseLayer[] = [];
   let currentValue: string | null = null;
-  let pendingActivation: ActivationFunction | null = null;
-
   for (let index = 0; index < graph.node.length; index += 1) {
     const node = graph.node[index];
     if (node.domain && node.domain !== "") {
       throw new Error(`Unsupported ONNX operator domain "${node.domain}".`);
     }
     if (node.opType === "Gemm") {
-      if (pendingActivation !== null && layers.length > 0) {
-        layers[layers.length - 1].activation = pendingActivation;
-        pendingActivation = null;
-      }
       if (node.input?.[0] !== currentValue && currentValue !== null) {
         throw new Error("ONNX graph is not a simple sequential dense network.");
       }
@@ -115,6 +114,9 @@ export function importOnnxNetwork(bytes: Uint8Array, filename = "Imported ONNX n
       if (!weight || weight.dims.length !== 2) throw new Error("Each ONNX Gemm layer must reference a 2D FLOAT32 weight initializer.");
       const transA = attributeInteger(node, "transA", 0);
       const transB = attributeInteger(node, "transB", 0);
+      if (attributeFloat(node, "alpha", 1) !== 1 || attributeFloat(node, "beta", 1) !== 1) {
+        throw new Error("ONNX Gemm alpha/beta scaling is not supported.");
+      }
       if (transA !== 0 || (transB !== 0 && transB !== 1)) {
         throw new Error("ONNX Gemm layers with transA or unsupported transB settings cannot be imported.");
       }
@@ -128,7 +130,11 @@ export function importOnnxNetwork(bytes: Uint8Array, filename = "Imported ONNX n
             : weight.values[inputIndex * units + outputIndex],
         ),
       );
-      const biasTensor = node.input?.[2] ? tensors.get(node.input[2]) : undefined;
+      if (!Array.isArray(node.input) || node.input.length < 2 || node.input.length > 3) {
+        throw new Error("ONNX Gemm layers must have two inputs and an optional embedded bias initializer.");
+      }
+      const biasTensor = node.input[2] ? tensors.get(node.input[2]) : undefined;
+      if (node.input[2] && !biasTensor) throw new Error("ONNX Gemm bias must be an embedded initializer.");
       const biases = biasTensor ? biasTensor.values : Array.from({ length: units }, () => 0);
       if (biasTensor && (biasTensor.dims.reduce((a, b) => a * b, 1) !== units || biases.length !== units)) {
         throw new Error("ONNX Gemm bias dimensions do not match the layer output.");
@@ -149,18 +155,25 @@ export function importOnnxNetwork(bytes: Uint8Array, filename = "Imported ONNX n
     }
 
     const activation = ACTIVATION_BY_OPERATOR[node.opType];
+    if (node.opType === "Softmax") {
+      const axis = attributeInteger(node, "axis", -1);
+      if (axis !== -1 && axis !== 1) throw new Error("Only last-dimension ONNX Softmax is supported.");
+    }
     if (!activation || layers.length === 0 || node.input?.[0] !== currentValue) {
       throw new Error(`Unsupported ONNX graph operator or topology: ${node.opType ?? "unknown"}.`);
     }
-    if (pendingActivation !== null) throw new Error("Multiple activation operators between dense layers are not supported.");
-    pendingActivation = activation;
     currentValue = node.output?.[0] ?? null;
     if (!currentValue) throw new Error("ONNX activation node has no output.");
+    if (layers[layers.length - 1].activation !== "linear") {
+      throw new Error("Only one non-linear activation per dense layer is supported.");
+    }
     layers[layers.length - 1].activation = activation;
-    pendingActivation = null;
   }
 
   if (layers.length === 0) throw new Error("ONNX graph does not contain any Gemm dense layers.");
+  if (!Array.isArray(graph.output) || graph.output.length !== 1 || graph.output[0].name !== currentValue) {
+    throw new Error("Only ONNX graphs with one output connected to the final dense layer are supported.");
+  }
   const firstWeight = tensors.get(graph.node.find((node: any) => node.opType === "Gemm")?.input?.[1]);
   const inferredInputSize = firstWeight ? (attributeInteger(graph.node.find((node: any) => node.opType === "Gemm"), "transB", 0) === 1 ? firstWeight.dims[1] : firstWeight.dims[0]) : 0;
   const inputSize = graphInputSize(graph, new Set(tensors.keys()), inferredInputSize);
