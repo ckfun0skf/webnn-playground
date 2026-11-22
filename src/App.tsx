@@ -484,6 +484,9 @@ function TrainingStudio({
     setHistory([]);
     setEvents([]);
     setPopulationViews({});
+    setPopulationReplays({});
+    setSelectedAgent(null);
+    setIsReplaying(false);
     setActiveGeneration(0);
     setError(null);
 
@@ -612,7 +615,7 @@ function TrainingStudio({
           const frames = populationReplays[key] ?? [];
           const selectedCandidate = selectedAgent.generation === activeGeneration ? populationViews[selectedAgent.index] : undefined;
           const replayView = frames[Math.min(replayFrameIndex, Math.max(0, frames.length - 1))];
-          const canReplay = Boolean(selectedCandidate?.finished || events.some((item) => item.generation === selectedAgent.generation && item.candidateIndex === selectedAgent.index));
+          const canReplay = Boolean(!selectedCandidate?.error && (selectedCandidate?.finished || events.some((item) => item.generation === selectedAgent.generation && item.candidateIndex === selectedAgent.index && !item.error)));
           return <div className="agent-detail-backdrop" role="presentation" onClick={() => { setSelectedAgent(null); setIsReplaying(false); }}>
             <section className="panel agent-detail-modal" role="dialog" aria-modal="true" aria-label="Agent details" onClick={(event) => event.stopPropagation()}>
               <div className="panel-heading"><div><div className="panel-kicker">AGENT DETAIL</div><h2>Generation {selectedAgent.generation + 1} · Agent {selectedAgent.index + 1}</h2></div><button className="text-button" onClick={() => { setSelectedAgent(null); setIsReplaying(false); }}>Close ×</button></div>
