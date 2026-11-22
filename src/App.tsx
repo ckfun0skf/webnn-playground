@@ -695,6 +695,8 @@ function PlaygroundOverview({
   const [result, setResult] = useState<{ fitness: number; metrics?: Record<string, unknown> } | null>(null);
   const [logs, setLogs] = useState<Record<string, unknown>[]>([]);
   const [playbackDelay, setPlaybackDelay] = useState(80);
+  const [environmentMaxSteps, setEnvironmentMaxSteps] = useState(500);
+  const [environmentSeed, setEnvironmentSeed] = useState(42);
   const [renderedView, setRenderedView] = useState<unknown>(source === snakeEnvironmentSource ? {
     type: "snake", width: 12, height: 12,
     snake: [{ x: 6, y: 6, head: true }, { x: 5, y: 6 }, { x: 4, y: 6 }],
@@ -728,9 +730,9 @@ function PlaygroundOverview({
           sessionId: `playground-${Date.now()}`,
           generation: 0,
           candidateIndex: 0,
-          seed: 42,
+          seed: environmentSeed,
         },
-        config: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, maxSteps: 500 },
+        config: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, maxSteps: environmentMaxSteps },
         timeoutMs: 30_000,
         signal: controller.signal,
         onReport: (metrics) => setLogs((current) => [...current, metrics]),
@@ -797,6 +799,12 @@ function PlaygroundOverview({
             <input id="playground-speed" type="range" min="0" max="500" step="10" disabled={status === "running"} value={playbackDelay} onChange={(event) => setPlaybackDelay(Number(event.target.value))} />
             <span>{playbackDelay === 0 ? "Fastest" : playbackDelay + " ms / step"}</span>
           </div>
+          <label className="environment-run-parameter">Max steps
+            <input type="number" min="1" max="10000" value={environmentMaxSteps} disabled={status === "running"} onChange={(event) => setEnvironmentMaxSteps(Math.max(1, event.target.valueAsNumber || 1))} />
+          </label>
+          <label className="environment-run-parameter">Environment seed
+            <input type="number" step="1" value={environmentSeed} disabled={status === "running"} onChange={(event) => setEnvironmentSeed(event.target.valueAsNumber || 0)} />
+          </label>
           <div className="selected-network-label">
             <BrainCircuit size={14} />
             <span>{network ? network.name : "A sample 2 → 2 MLP will be created on first run"}</span>
