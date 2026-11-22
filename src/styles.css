@@ -420,3 +420,8 @@ h1 { margin: 0; font-size: 25px; font-weight: 600; letter-spacing: -.7px; }
   .agent-replay-controls { flex-wrap: wrap; }
   .agent-replay-controls input[type="range"] { order: 3; flex-basis: 100%; }
 }
+
+.environment-run-parameter { display: inline-flex; align-items: center; gap: 6px; color: #aeb5c1; font-size: 9px; white-space: nowrap; }
+.environment-run-parameter input { width: 76px; height: 27px; padding: 0 6px; color: #d0d6e0; background: #11161d; border: 1px solid #343d49; border-radius: 4px; font: 9px var(--mono); }
+.environment-run-parameter input:focus { outline: none; border-color: #9385df; }
+@media (max-width: 760px) { .environment-run-parameter { flex-wrap: wrap; } }
