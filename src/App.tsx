@@ -387,6 +387,21 @@ export async function sessionEnd(ctx, result) {
   // Optional cleanup after a successful evaluation.
 }`;
 
+type GridVisualization = {
+  type: "grid";
+  width: number;
+  height: number;
+  cells?: { x: number; y: number; state?: string; label?: string | number }[];
+  title?: string;
+  metrics?: { label: string; value: string | number }[];
+};
+
+type MetricsVisualization = {
+  type: "metrics";
+  title?: string;
+  metrics: { label: string; value: string | number; unit?: string }[];
+};
+
 type SnakeVisualization = {
   type: "snake";
   width: number;
@@ -418,6 +433,31 @@ function EnvironmentVisualization({ view }: { view: unknown }) {
     );
   }
 
+  if (view && typeof view === "object" && (view as GridVisualization).type === "grid") {
+    const grid = view as GridVisualization;
+    const width = Math.max(1, Math.min(64, Math.floor(grid.width || 1)));
+    const height = Math.max(1, Math.min(64, Math.floor(grid.height || 1)));
+    const cells = Array.isArray(grid.cells) ? grid.cells : [];
+    return <div className="generic-playground-view">
+      {grid.title && <strong className="generic-view-title">{grid.title}</strong>}
+      <div className="generic-playground-grid" style={{ gridTemplateColumns: "repeat(" + width + ", minmax(0, 1fr))" }}>
+        {Array.from({ length: width * height }, (_, index) => {
+          const x = index % width, y = Math.floor(index / width);
+          const cell = cells.find((item) => item.x === x && item.y === y);
+          const state = ["active", "target", "wall", "success", "danger", "muted"].includes(cell?.state ?? "") ? cell!.state : "empty";
+          return <div key={index} className={"generic-playground-cell " + state} title={cell?.label === undefined ? undefined : String(cell.label)}>{cell?.label ?? ""}</div>;
+        })}
+      </div>
+      {grid.metrics && <div className="generic-view-metrics">{grid.metrics.map((item) => <span key={item.label}>{item.label} <strong>{item.value}</strong></span>)}</div>}
+    </div>;
+  }
+  if (view && typeof view === "object" && (view as MetricsVisualization).type === "metrics") {
+    const data = view as MetricsVisualization;
+    return <div className="generic-playground-view">
+      {data.title && <strong className="generic-view-title">{data.title}</strong>}
+      <div className="generic-view-metrics">{data.metrics.map((item) => <span key={item.label}>{item.label} <strong>{item.value}{item.unit ? " " + item.unit : ""}</strong></span>)}</div>
+    </div>;
+  }
   return <pre>{view === null ? "Environment-defined state will appear here." : JSON.stringify(view, null, 2)}</pre>;
 }
 function TrainingStudio({
