@@ -67,7 +67,9 @@ export function runPlaygroundSession(
       fail(new Error(event.message || "Environment worker failed."));
     worker.onmessage = (event: MessageEvent<WorkerMessage>) => {
       const message = event.data;
-      if (message.type === "report") {
+      if (message.type === "backend") {
+        options.onBackend?.({ backend: message.backend, detail: message.detail });
+      } else if (message.type === "report") {
         try {
           options.onReport?.(message.metrics);
         } catch (error) {
@@ -117,6 +119,7 @@ export function runPlaygroundSession(
         config: options.config ?? {},
         renderEnabled: Boolean(options.onRender),
         reportEnabled: Boolean(options.onReport),
+        inferenceBackend: options.inferenceBackend ?? "auto",
       } satisfies WorkerRequest);
     } catch (error) {
       fail(error instanceof Error ? error : new Error(String(error)));

@@ -437,6 +437,13 @@ function TrainingStudio({
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [playbackDelay, setPlaybackDelay] = useState(80);
+  const [inferenceBackend, setInferenceBackend] = useState<"auto" | "javascript">("auto");
+  const [backendStatus, setBackendStatus] = useState("Backend will be selected when training starts.");
+  const [bestReplay, setBestReplay] = useState<{ generation: number; index: number; frames: unknown[] } | null>(null);
+  const [bestReplayFrameIndex, setBestReplayFrameIndex] = useState(0);
+  const [bestReplayPlaying, setBestReplayPlaying] = useState(false);
+  const currentReplaysRef = useRef<Record<string, unknown[]>>({});
+  const bestFitnessRef = useRef<number | null>(null);
   const [populationViews, setPopulationViews] = useState<Record<number, { view: unknown; fitness?: number; finished?: boolean; error?: string }>>({});
   const [populationReplays, setPopulationReplays] = useState<Record<string, unknown[]>>({});
   const [populationColumns, setPopulationColumns] = useState(4);
@@ -469,6 +476,15 @@ function TrainingStudio({
   }, [selectedPlaygroundId]);
 
   useEffect(() => {
+    if (!bestReplayPlaying || !bestReplay || bestReplay.frames.length < 2) return;
+    const timer = window.setInterval(() => setBestReplayFrameIndex((index) => {
+      if (index >= bestReplay.frames.length - 1) { setBestReplayPlaying(false); return index; }
+      return index + 1;
+    }), Math.max(30, playbackDelay || 30));
+    return () => window.clearInterval(timer);
+  }, [bestReplayPlaying, bestReplay, playbackDelay]);
+
+  useEffect(() => {
     if (!isReplaying || !selectedAgent) return;
     const frames = populationReplays[selectedAgent.generation + "-" + selectedAgent.index] ?? [];
     if (replayFrameIndex >= frames.length - 1) {
@@ -482,7 +498,7 @@ function TrainingStudio({
   }, [isReplaying, selectedAgent, replayFrameIndex, playbackDelay, populationReplays]);
   const abortRef = useRef<AbortController | null>(null);
 
-  type NumericConfigKey = "populationSize" | "generations" | "eliteCount" | "environmentSeed" | "tournamentSize" | "crossoverRate" | "mutationRate" | "mutationScale" | "evaluationTimeoutMs" | "seed";
+  type NumericConfigKey = "populationSize" | "generations" | "eliteCount" | "environmentSeed" | "tournamentSize" | "crossoverRate" | "mutationRate" | "mutationScale" | "evaluationTimeoutMs" | "seed" | "maxConcurrentEvaluations";
   const updateNumber = (key: NumericConfigKey, value: number) => {
     if (!Number.isFinite(value)) return;
     setConfig((current) => {
@@ -508,6 +524,12 @@ function TrainingStudio({
     setEvents([]);
     setPopulationViews({});
     setPopulationReplays({});
+    currentReplaysRef.current = {};
+    bestFitnessRef.current = null;
+    setBestReplay(null);
+    setBestReplayFrameIndex(0);
+    setBestReplayPlaying(false);
+    setBackendStatus(inferenceBackend === "auto" ? "Requesting WebNN acceleration with a low-power preference…" : "JavaScript CPU inference selected.");
     setSelectedAgent(null);
     setIsReplaying(false);
     setActiveGeneration(0);
@@ -519,8 +541,10 @@ function TrainingStudio({
         initialNetwork: activeNetwork,
         environmentSource: selectedPlayground.source,
         config,
+        inferenceBackend,
         configForEnvironment: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, maxSteps: 100000, ...environmentParameters },
         signal: controller.signal,
+        onBackend: (status) => setBackendStatus(status.detail),
         onCandidate: (candidate) => {
           setEvents((current) => [...current, {
             generation: candidate.generation,
@@ -529,6 +553,13 @@ function TrainingStudio({
             error: candidate.error,
           }]);
           setBest((current) => !current || candidate.fitness > current.fitness ? candidate : current);
+          if (!candidate.error && (bestFitnessRef.current === null || candidate.fitness > bestFitnessRef.current)) {
+            bestFitnessRef.current = candidate.fitness;
+            const replayKey = candidate.generation + "-" + candidate.candidateIndex;
+            setBestReplay({ generation: candidate.generation, index: candidate.candidateIndex, frames: currentReplaysRef.current[replayKey] ?? [] });
+            setBestReplayFrameIndex(0);
+            setBestReplayPlaying(false);
+          }
           setPopulationViews((current) => ({
             ...current,
             [candidate.candidateIndex]: {
@@ -543,14 +574,19 @@ function TrainingStudio({
           setActiveGeneration(generation);
           setPopulationViews((current) => ({ ...current, [candidateIndex]: { ...current[candidateIndex], view } }));
           const replayKey = generation + "-" + candidateIndex;
-          setPopulationReplays((current) => ({
-            ...current,
-            [replayKey]: [...(current[replayKey] ?? []), view].slice(-1200),
-          }));
+          const frames = [...(currentReplaysRef.current[replayKey] ?? []), view].slice(-1200);
+          currentReplaysRef.current = { ...currentReplaysRef.current, [replayKey]: frames };
+          setPopulationReplays(currentReplaysRef.current);
         },
         onGeneration: (summary) => {
           setHistory((current) => [...current, summary]);
-          if (summary.generation < config.generations - 1) setPopulationViews({});
+          if (summary.generation < config.generations - 1) {
+            currentReplaysRef.current = {};
+            setPopulationReplays({});
+            setPopulationViews({});
+            setSelectedAgent(null);
+            setIsReplaying(false);
+          }
         },
       });
       setBest(result.best);
@@ -586,6 +622,7 @@ function TrainingStudio({
         <div className="training-config-body">
           <p className="training-description">Evaluate candidate networks inside your JavaScript Playground. Fitness is calculated by the environment; the evolution engine handles selection, crossover, mutation, and generations.</p>
           <div className="training-config-grid">
+            <label>Inference backend<select value={inferenceBackend} onChange={(event) => setInferenceBackend(event.target.value as "auto" | "javascript")} disabled={status === "running"}><option value="auto">WebNN accelerated · low-power preference</option><option value="javascript">JavaScript · CPU</option></select></label>
             <label>Playground<select value={selectedPlaygroundId} onChange={(event) => { setSelectedPlaygroundId(event.target.value); setNetwork(null); setSelectedNetworkId(""); }}><option value="">Select a saved Playground…</option>{savedPlaygrounds.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.definition.inputSize}→{p.definition.outputSize}</option>)}</select></label>
             <label>Compatible Network<select value={selectedNetworkId} onChange={(event) => { setSelectedNetworkId(event.target.value); const item = compatibleNetworks.find((x) => x.id === event.target.value); if (item) setNetwork(item.network); }}><option value="">Select a compatible Network…</option>{compatibleNetworks.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
             {selectedPlayground?.definition.parameters.map((parameter) => <label key={parameter.key}>{parameter.label}
@@ -593,6 +630,7 @@ function TrainingStudio({
                 <input type={parameter.type === "number" || parameter.type === "randomSeed" ? "number" : "text"} min={parameter.min} max={parameter.max} step={parameter.step} value={String(environmentParameters[parameter.key] ?? parameter.default)} onChange={(event) => setEnvironmentParameters((current) => ({ ...current, [parameter.key]: parameter.type === "number" || parameter.type === "randomSeed" ? event.target.valueAsNumber : event.target.value }))} />}
             </label>)}
             <label>Population size<input type="number" min="2" max="500" value={config.populationSize} onChange={(event) => updateNumber("populationSize", event.target.valueAsNumber)} /></label>
+            <label>Concurrent evaluations<input type="number" min="1" max={config.populationSize} value={config.maxConcurrentEvaluations} onChange={(event) => updateNumber("maxConcurrentEvaluations", Math.min(config.populationSize, Math.max(1, Math.floor(event.target.valueAsNumber))))} /></label>
             <label>Generations<input type="number" min="1" max="1000" value={config.generations} onChange={(event) => updateNumber("generations", event.target.valueAsNumber)} /></label>
             <label>Elite count<input type="number" min="1" max={Math.max(1, config.populationSize - 1)} value={config.eliteCount} onChange={(event) => updateNumber("eliteCount", event.target.valueAsNumber)} /></label>
             <label>Tournament size<input type="number" min="1" max="100" value={config.tournamentSize} onChange={(event) => updateNumber("tournamentSize", event.target.valueAsNumber)} /></label>
@@ -612,6 +650,7 @@ function TrainingStudio({
             <input id="training-speed" type="range" min="0" max="500" step="10" disabled={status === "running"} value={playbackDelay} onChange={(event) => setPlaybackDelay(Number(event.target.value))} />
             <span>{playbackDelay === 0 ? "Fastest" : playbackDelay + " ms / step"}</span>
           </div>
+          <p className="training-description">{backendStatus}</p>
           <div className="training-actions">
             {status === "running" ? (
               <button className="secondary-button" onClick={cancelTraining}>Cancel training</button>
@@ -692,6 +731,14 @@ function TrainingStudio({
             <>
               <strong className="best-fitness">{best.fitness.toFixed(7)}</strong>
               <p>Generation {best.generation + 1} · Candidate {best.candidateIndex + 1}</p>
+              {bestReplay && bestReplay.frames.length > 0 && <>
+                <div className="agent-detail-board"><EnvironmentVisualization view={bestReplay.frames[Math.min(bestReplayFrameIndex, bestReplay.frames.length - 1)]} /></div>
+                <div className="agent-replay-controls">
+                  <span>Best replay · {bestReplayFrameIndex + 1} / {bestReplay.frames.length}</span>
+                  <input aria-label="Best network replay position" type="range" min="0" max={Math.max(0, bestReplay.frames.length - 1)} value={Math.min(bestReplayFrameIndex, bestReplay.frames.length - 1)} onChange={(event) => { setBestReplayFrameIndex(Number(event.target.value)); setBestReplayPlaying(false); }} />
+                  <button className="secondary-button" disabled={bestReplay.frames.length < 2} onClick={() => { if (bestReplayPlaying) setBestReplayPlaying(false); else { if (bestReplayFrameIndex >= bestReplay.frames.length - 1) setBestReplayFrameIndex(0); setBestReplayPlaying(true); } }}>{bestReplayPlaying ? "Pause" : "Replay best"}</button>
+                </div>
+              </>}
               <button className="primary-button full-button" onClick={() => { setNetwork(best.network); setWorkspace("network"); }}><BrainCircuit size={14} /> Load best network</button>
               <button className="secondary-button full-button" onClick={async () => {
                 if (!best) return;

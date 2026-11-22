@@ -40,6 +40,7 @@ describe("runNeuroevolution", () => {
         seed: 17,
         environmentSeed: 1234,
         includeInitialNetwork: true,
+        maxConcurrentEvaluations: 2,
       },
       onCandidate: (candidate) => candidateEvents.push(candidate.candidateIndex),
       onGeneration: (summary) => generationEvents.push(summary.generation),
@@ -53,14 +54,11 @@ describe("runNeuroevolution", () => {
       expect(call[0].config?.randomSeed).toBe(expectedSeed);
       if (callIndex < 4) expect(call[0].session.generation).toBe(0);
     }
-    expect(result.evaluations).toHaveLength(12);
     expect(result.history).toHaveLength(3);
     expect(generationEvents).toEqual([0, 1, 2]);
     expect(candidateEvents).toHaveLength(12);
     expect(result.best.network).toBeDefined();
-    expect(result.best.fitness).toBeGreaterThanOrEqual(
-      Math.min(...result.evaluations.map((candidate) => candidate.fitness)),
-    );
+    expect(Number.isFinite(result.best.fitness)).toBe(true);
   });
 
   it("rejects invalid population and mutation settings", async () => {

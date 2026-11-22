@@ -26,6 +26,7 @@ export const DEFAULT_NEUROEVOLUTION_CONFIG = {
   seed: 42,
   environmentSeed: 42,
   includeInitialNetwork: true,
+  maxConcurrentEvaluations: 2,
 } as const;
 
 function validateOptions(options: RunNeuroevolutionOptions): void {
@@ -62,6 +63,9 @@ function validateOptions(options: RunNeuroevolutionOptions): void {
   }
   if (!Number.isFinite(config.evaluationTimeoutMs) || config.evaluationTimeoutMs <= 0) {
     throw new Error("evaluationTimeoutMs must be a positive number.");
+  }
+  if (!Number.isInteger(config.maxConcurrentEvaluations) || config.maxConcurrentEvaluations < 1) {
+    throw new Error("maxConcurrentEvaluations must be a positive integer.");
   }
 }
 
@@ -132,7 +136,6 @@ export async function runNeuroevolution(
   const { config } = options;
   const random = createSeededRandom(config.seed);
   const runId = `run-${Date.now()}-${Math.floor(Math.random() * 1_000_000).toString(36)}`;
-  const evaluations: CandidateEvaluation[] = [];
   const history: GenerationSummary[] = [];
   let population: MLPNetwork[] = [];
 
@@ -150,46 +153,39 @@ export async function runNeuroevolution(
   let best: CandidateEvaluation | undefined;
 
   for (let generation = 0; generation < config.generations; generation += 1) {
-    const generationResults = await Promise.all(population.map(async (network, candidateIndex) => {
-      if (options.signal?.aborted) {
-        throw new Error(options.signal.reason?.toString() ?? "Neuroevolution cancelled.");
-      }
-      const candidateId = `${runId}-g${generation}-c${candidateIndex}`;
-      const baseEnvironmentSeed = Number(options.configForEnvironment?.randomSeed ?? config.environmentSeed);
-      const seed = (baseEnvironmentSeed + Math.imul(generation, 0x9e3779b9)) >>> 0;
-      try {
-        const result = await runPlaygroundSession({
-          source: options.environmentSource,
-          network,
-          session: { sessionId: candidateId, generation, candidateIndex, seed },
-          config: { ...options.configForEnvironment, randomSeed: seed },
-          timeoutMs: config.evaluationTimeoutMs,
-          signal: options.signal,
-          onRender: (view) => options.onPopulationRender?.(generation, candidateIndex, view),
-        });
-        const evaluation: CandidateEvaluation = {
-          id: candidateId, generation, candidateIndex, network,
-          fitness: result.fitness, metrics: result.metrics,
-        };
-        evaluations.push(evaluation);
-        if (!best || evaluation.fitness > best.fitness) best = evaluation;
-        options.onCandidate?.(evaluation);
-        return evaluation;
-      } catch (error) {
-        if (options.signal?.aborted) {
-          throw new Error(options.signal.reason?.toString() ?? "Neuroevolution cancelled.");
+    // Bound Worker and WebNN-context creation to avoid population-sized memory spikes.
+    const generationResults = new Array<CandidateEvaluation>(population.length);
+    let nextCandidateIndex = 0;
+    const evaluateNext = async () => {
+      while (true) {
+        if (options.signal?.aborted) throw new Error(options.signal.reason?.toString() ?? "Neuroevolution cancelled.");
+        const candidateIndex = nextCandidateIndex++;
+        if (candidateIndex >= population.length) return;
+        const network = population[candidateIndex];
+        const candidateId = `${runId}-g${generation}-c${candidateIndex}`;
+        const baseEnvironmentSeed = Number(options.configForEnvironment?.randomSeed ?? config.environmentSeed);
+        const seed = (baseEnvironmentSeed + Math.imul(generation, 0x9e3779b9)) >>> 0;
+        let evaluation: CandidateEvaluation;
+        try {
+          const result = await runPlaygroundSession({
+            source: options.environmentSource, network,
+            session: { sessionId: candidateId, generation, candidateIndex, seed },
+            config: { ...options.configForEnvironment, randomSeed: seed },
+            timeoutMs: config.evaluationTimeoutMs, signal: options.signal,
+            inferenceBackend: options.inferenceBackend ?? "auto", onBackend: options.onBackend,
+            onRender: (view) => options.onPopulationRender?.(generation, candidateIndex, view),
+          });
+          evaluation = { id: candidateId, generation, candidateIndex, network, fitness: result.fitness, metrics: result.metrics };
+        } catch (error) {
+          if (options.signal?.aborted) throw new Error(options.signal.reason?.toString() ?? "Neuroevolution cancelled.");
+          evaluation = { id: candidateId, generation, candidateIndex, network, fitness: -Number.MAX_VALUE, error: error instanceof Error ? error.message : String(error) };
         }
-        const evaluation: CandidateEvaluation = {
-          id: candidateId, generation, candidateIndex, network,
-          fitness: -Number.MAX_VALUE,
-          error: error instanceof Error ? error.message : String(error),
-        };
-        evaluations.push(evaluation);
+        generationResults[candidateIndex] = evaluation;
         if (!best || evaluation.fitness > best.fitness) best = evaluation;
         options.onCandidate?.(evaluation);
-        return evaluation;
       }
-    }));
+    };
+    await Promise.all(Array.from({ length: Math.min(config.maxConcurrentEvaluations, population.length) }, () => evaluateNext()));
     const ranked = [...generationResults].sort((a, b) => b.fitness - a.fitness);
     const summary = summarizeGeneration(generation, ranked);
     history.push(summary);
@@ -206,5 +202,5 @@ export async function runNeuroevolution(
   }
 
   if (!best) throw new Error("Neuroevolution completed without evaluating any candidates.");
-  return { best, history, evaluations };
+  return { best, history };
 }

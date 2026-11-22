@@ -65,12 +65,13 @@ The JavaScript backend exposes `compileMLP(network)`, which validates and snapsh
 - Used for broad compatibility and correctness comparisons.
 
 ### WebNN backend
-- Optional backend, detected at runtime.
-- Used only for supported operations and compatible model graphs.
-- Must expose capability/compilation errors clearly.
-- Must not be assumed available merely because the page is hosted over HTTPS.
+- Used for supported MLP inference when the browser exposes WebNN in the dedicated environment Worker.
+- Build one compiled graph per candidate session and reuse its input/output tensors for repeated predictions; destroy tensors, graph, and context when the session ends.
+- Request accelerated execution with a low-power preference to encourage efficient ML hardware. The browser/OS chooses the actual device.
+- Do not claim that an NPU is active: the current standard does not expose a reliable device identity or a way to force a specific NPU. The UI describes this as an acceleration request, not confirmed NPU execution.
+- Fall back to the JavaScript reference backend when WebNN is missing or graph compilation fails.
+- Do not assume WebNN is available merely because the page is hosted over HTTPS.
 - Backend comparison must use equivalent inputs and model parameters and report timing methodology.
-- Do not promise deterministic CPU/GPU/NPU selection. The current WebNN specification abstracts the underlying device and does not expose a standardized device-enumeration or exact-device selection API. Where supported, expose the standardized power/performance preference and report only facts the browser actually exposes (for example, whether the context is accelerated), not an inferred GPU or NPU identity.
 
 The network API must not depend directly on WebNN objects. Backend adapters translate the canonical model/operation representation into backend execution.
 
@@ -181,7 +182,7 @@ Responsibilities:
 
 The environment must not implement population management, mutation, selection, or generation progression.
 
-Evaluation concurrency must be configurable and bounded by the device's available resources. Each candidate runs in its own Worker; population visualization may show a large grid, while the UI should batch/coalesce render updates to avoid excessive main-thread work. The evolution seed controls selection and mutation; a separate shared environment seed ensures candidates in the same comparison cohort see identical random conditions. Playground code should use the step-budget API to guarantee termination.
+Evaluation concurrency must be configurable and bounded by the device's available resources (default: two simultaneous candidates). Each candidate runs in its own Worker; population visualization may show a large grid, while the UI should batch/coalesce render updates to avoid excessive main-thread work. Do not retain every evaluated candidate network or all historical replay frames: keep current-generation replays plus only the best-so-far replay. The evolution seed controls selection and mutation; a separate shared environment seed ensures candidates in the same comparison cohort see identical random conditions. Playground code should use the step-budget API to guarantee termination.
 
 ## 6. Supervised learning
 

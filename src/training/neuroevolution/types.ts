@@ -1,4 +1,5 @@
 import type { MLPNetwork } from "../../core/model";
+import type { InferenceBackend, InferenceBackendStatus } from "../../playground/api/types";
 
 export interface NeuroevolutionConfig {
   populationSize: number;
@@ -14,6 +15,8 @@ export interface NeuroevolutionConfig {
   /** Shared by every candidate so they are evaluated under identical random conditions. */
   environmentSeed: number;
   includeInitialNetwork: boolean;
+  /** Maximum number of candidate Workers running concurrently. */
+  maxConcurrentEvaluations: number;
 }
 
 export interface CandidateEvaluation {
@@ -40,6 +43,8 @@ export interface RunNeuroevolutionOptions {
   environmentSource: string;
   config: NeuroevolutionConfig;
   configForEnvironment?: Record<string, unknown>;
+  inferenceBackend?: InferenceBackend;
+  onBackend?: (status: InferenceBackendStatus) => void;
   signal?: AbortSignal;
   onCandidate?: (candidate: CandidateEvaluation) => void;
   onPopulationRender?: (generation: number, candidateIndex: number, view: unknown) => void;
@@ -49,5 +54,4 @@ export interface RunNeuroevolutionOptions {
 export interface NeuroevolutionResult {
   best: CandidateEvaluation;
   history: GenerationSummary[];
-  evaluations: CandidateEvaluation[];
 }
