@@ -141,6 +141,7 @@ The environment and candidate network both execute inside the dedicated Worker. 
 Playground sessions and Neuroevolution can request one of these inference policies:
 
 - `auto`: let the browser choose a suitable WebNN execution path.
+- `npu`: request the NPU through Chromium's implementation-specific `deviceType: "npu"` context option. This is not part of the current W3C WebNN standard and may be ignored by other browsers or backends. Chromium/Windows ML may fall back to GPU or CPU when an NPU is unavailable or its driver is unsupported; WebNN does not provide a portable confirmation of the physical device.
 - `low-power`: request WebNN with a low-power preference; this may favor an NPU, but does not guarantee one.
 - `high-performance`: request WebNN with a high-performance preference; this may favor a GPU, but does not guarantee one.
 - `webnn-cpu`: request WebNN CPU inference.
