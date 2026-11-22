@@ -47,6 +47,62 @@ export async function sessionEnd(ctx, result) {
 
 A session must call `ctx.finish({ fitness, metrics? })` exactly once. The fitness value must be a finite number. The environment should return from `sessionStart` after finishing; the runtime waits for the finish acknowledgement and then calls `sessionEnd`.
 
+## Visualization contract
+
+Environment JavaScript sends serializable view data through `ctx.render(view)`. It does not create DOM or React components. The host renders the data in the Playground panel; this keeps simulation code isolated in a Worker.
+
+### Canvas view
+
+Canvas is the flexible general-purpose renderer. It supports drawing commands plus optional header and footer labels:
+
+```js
+ctx.render({
+  type: "canvas",
+  width: 800,
+  height: 500,
+  background: "#101216",
+  header: ["Generation 12", { label: "Agent", value: 4 }],
+  commands: [
+    { op: "fillRect", x: 20, y: 20, width: 40, height: 40, color: "#68d6a3" },
+    { op: "line", x1: 20, y1: 80, x2: 200, y2: 80, color: "#9b8cff", lineWidth: 2 },
+    { op: "circle", x: 100, y: 140, radius: 12, color: "#e7b66d" },
+    { op: "text", text: "Agent 4", x: 20, y: 190, color: "#ffffff" }
+  ],
+  footer: ["Fitness: 24", "Steps: 180"]
+});
+```
+
+Supported commands: `fillRect`, `strokeRect`, `line`, `circle`, and `text`. Coordinates are in canvas pixels. The command list is data, not executable code; the host interprets it on the Canvas 2D context.
+
+### Built-in grid view
+
+Use the grid renderer for cell-based environments without drawing each cell yourself:
+
+```js
+ctx.render({
+  type: "grid", title: "Warehouse", width: 8, height: 6,
+  cells: [
+    { x: 1, y: 2, state: "active", label: "A" },
+    { x: 5, y: 3, state: "target", label: "T" },
+    { x: 3, y: 1, state: "wall" }
+  ],
+  header: ["Episode 3"], footer: ["Delivered: 4"]
+});
+```
+
+Grid states: `active`, `target`, `wall`, `success`, `danger`, and `muted`. Grid views can also include optional `header` and `footer` label arrays.
+
+### Metrics view
+
+```js
+ctx.render({
+  type: "metrics", title: "Simulation status",
+  metrics: [{ label: "Score", value: 12 }, { label: "Time", value: 34, unit: "s" }]
+});
+```
+
+Unknown view types are shown as formatted JSON. Templates are ordinary Playground source files and metadata; the runtime does not contain template-specific or game-specific rendering logic.
+
 ## Context
 
 | Member | Description |

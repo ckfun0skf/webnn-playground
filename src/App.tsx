@@ -4,11 +4,13 @@ import { compileMLP } from "./core/engine";
 import { runPlaygroundSession } from "./playground/runtime";
 import { DEFAULT_NEUROEVOLUTION_CONFIG, runNeuroevolution } from "./training/neuroevolution";
 import type { CandidateEvaluation, GenerationSummary, NeuroevolutionConfig } from "./training/neuroevolution";
-import snakeEnvironmentSource from "./playground/examples/snake.environment.js?raw";
-import { deleteSavedNetwork, listSavedNetworks, listSavedPlaygrounds, saveNetwork, saveTrainingRun, type SavedNetworkRecord, type SavedPlaygroundRecord } from "./storage";
+import { PLAYGROUND_TEMPLATES } from "./playground/templates";
+import { deleteSavedNetwork, listSavedNetworks, listSavedPlaygrounds, saveNetwork, savePlayground, saveTrainingRun, type SavedNetworkRecord, type SavedPlaygroundRecord } from "./storage";
 import ResourceLibrary from "./ResourceLibrary";
+import type { PlaygroundDefinition } from "./playground/api";
 import {
   Activity,
+  Save,
   BrainCircuit,
   ChevronDown,
   CircleHelp,
@@ -45,7 +47,7 @@ export default function App() {
   const [workspace, setWorkspace] = useState<Workspace>("network");
   const [projectName] = useState("Untitled experiment");
   const [network, setNetwork] = useState<MLPNetwork | null>(null);
-  const [environmentSource, setEnvironmentSource] = useState(DEFAULT_ENVIRONMENT_CODE);
+  const [environmentSource, setEnvironmentSource] = useState(PLAYGROUND_TEMPLATES[0].source);
   const [libraryRevision, setLibraryRevision] = useState(0);
   const [resourceRevision, setResourceRevision] = useState(0);
   const [inputText, setInputText] = useState("0, 0, 0");
@@ -124,27 +126,9 @@ export default function App() {
             <button className="primary-button"><Plus size={15} /> New {workspace === "playground" ? "environment" : workspace === "network" ? "network" : "experiment"}</button>
           </div>
         </div>
-        {workspace === "network" && !network && (
-          <section className="getting-started panel">
-            <div className="getting-started-copy">
-              <span className="panel-kicker">NEW HERE? START WITH A WORKING EXAMPLE</span>
-              <h2>Train a neural network to play Snake</h2>
-              <p>No setup required. Load the example, watch the game board, then evolve a better Snake agent.</p>
-              <div className="getting-started-steps">
-                <span><b>1</b> Load Snake</span><span><b>2</b> Run the simulation</span><span><b>3</b> Train the agent</span>
-              </div>
-            </div>
-            <button className="primary-button" onClick={() => {
-              setEnvironmentSource(snakeEnvironmentSource);
-              setNetwork(createMLP({ name: "Snake agent", inputSize: 11, layers: [{ units: 16, activation: "relu" }, { units: 3, activation: "softmax" }] }));
-              setWorkspace("playground");
-            }}><Play size={14} /> Try Snake</button>
-          </section>
-        )}
-
         {workspace === "network" && <NetworkOverview network={network} setNetwork={setNetwork} onSaveNetwork={saveToLibrary} inputText={inputText} setInputText={setInputText} prediction={prediction} setPrediction={setPrediction} inferenceError={inferenceError} setInferenceError={setInferenceError} />}
-        {workspace === "training" && <TrainingStudio network={network} setNetwork={setNetwork} onSaveNetwork={saveToLibrary} environmentSource={environmentSource} setWorkspace={setWorkspace} />}
-        {workspace === "playground" && <PlaygroundOverview network={network} setNetwork={setNetwork} source={environmentSource} setSource={setEnvironmentSource} />}
+        {workspace === "training" && <TrainingStudio network={network} setNetwork={setNetwork} onSaveNetwork={saveToLibrary} resourceRevision={resourceRevision} setWorkspace={setWorkspace} />}
+        {workspace === "playground" && <PlaygroundOverview network={network} setNetwork={setNetwork} source={environmentSource} setSource={setEnvironmentSource} onPlaygroundSaved={() => setResourceRevision((v) => v + 1)} resourceRevision={resourceRevision} />}
         {workspace === "library" && <NetworkLibrary revision={libraryRevision} onLoad={(model) => { setNetwork(model); setWorkspace("network"); }} />}
         {workspace === "resources" && <ResourceLibrary source={environmentSource} onLoadPlayground={(source) => { setEnvironmentSource(source); setWorkspace("playground"); }} onLoadNetwork={(model) => { setNetwork(model); setWorkspace("network"); }} revision={resourceRevision} onChanged={() => setResourceRevision((v) => v + 1)} />}
       </main>
@@ -346,77 +330,94 @@ function NetworkOverview({
   );
 }
 
-const DEFAULT_ENVIRONMENT_CODE = `export async function sessionStart(ctx) {
-  const inputSize = Number(ctx.config.inputSize);
-  const outputSize = Number(ctx.config.outputSize);
-  let totalError = 0;
-
-  // This example evaluates the network on three generated observations.
-  for (let step = 0; step < 3; step += 1) {
-    if (ctx.signal.aborted) return;
-
-    const input = Array.from(
-      { length: inputSize },
-      (_, index) => index === step % inputSize ? 1 : 0
-    );
-    const target = Array.from(
-      { length: outputSize },
-      (_, index) => index === step % outputSize ? 1 : 0
-    );
-
-    const output = await ctx.network.predict(input);
-    const error = output.reduce(
-      (sum, value, index) => sum + (value - target[index]) ** 2,
-      0
-    );
-
-    totalError += error;
-    ctx.report({ step: step + 1, error, totalError });
-    ctx.render({ type: "observation", step: step + 1, input, output, target, error });
-    await ctx.yield();
-  }
-
-  await ctx.finish({
-    fitness: 1 / (1 + totalError),
-    metrics: { totalError, observations: 3 }
-  });
-}
-
-export async function sessionEnd(ctx, result) {
-  // Optional cleanup after a successful evaluation.
-}`;
-
-type SnakeVisualization = {
-  type: "snake";
+type GridVisualization = {
+  type: "grid";
   width: number;
   height: number;
-  snake: { x: number; y: number; head?: boolean }[];
-  food: { x: number; y: number } | null;
-  score: number;
-  steps: number;
-  terminal: boolean;
+  cells?: { x: number; y: number; state?: string; label?: string | number }[];
+  title?: string;
+  metrics?: { label: string; value: string | number }[];
+  header?: (string | { label: string; value?: string | number })[];
+  footer?: (string | { label: string; value?: string | number })[];
 };
 
-function EnvironmentVisualization({ view }: { view: unknown }) {
-  if (view && typeof view === "object" && (view as SnakeVisualization).type === "snake") {
-    const snakeView = view as SnakeVisualization;
-    return (
-      <div className="snake-visualization">
-        <div className="snake-board" style={{ gridTemplateColumns: "repeat(" + snakeView.width + ", minmax(0, 1fr))" }}>
-          {Array.from({ length: snakeView.width * snakeView.height }, (_, index) => {
-            const x = index % snakeView.width;
-            const y = Math.floor(index / snakeView.width);
-            const segment = snakeView.snake.find((part) => part.x === x && part.y === y);
-            const isFood = snakeView.food?.x === x && snakeView.food?.y === y;
-            const cellClass = segment ? (segment.head ? "head" : "body") : isFood ? "food" : "";
-            return <div key={index} className={"snake-board-cell " + cellClass} />;
-          })}
-        </div>
-        <div className="snake-board-stats"><span>Score <strong>{snakeView.score}</strong></span><span>Steps <strong>{snakeView.steps}</strong></span><span>{snakeView.terminal ? "Finished" : "Running"}</span></div>
-      </div>
-    );
-  }
+type MetricsVisualization = {
+  type: "metrics";
+  title?: string;
+  metrics: { label: string; value: string | number; unit?: string }[];
+};
 
+type CanvasCommand =
+  | { op: "fillRect" | "strokeRect"; x: number; y: number; width: number; height: number; color?: string; lineWidth?: number }
+  | { op: "line"; x1: number; y1: number; x2: number; y2: number; color?: string; lineWidth?: number }
+  | { op: "circle"; x: number; y: number; radius: number; color?: string; stroke?: boolean; lineWidth?: number }
+  | { op: "text"; text: string; x: number; y: number; color?: string; font?: string; align?: CanvasTextAlign };
+type CanvasVisualization = {
+  type: "canvas"; width: number; height: number; background?: string;
+  commands?: CanvasCommand[]; header?: (string | { label: string; value?: string | number })[];
+  footer?: (string | { label: string; value?: string | number })[];
+};
+function CanvasView({ view }: { view: CanvasVisualization }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext("2d");
+    if (!canvas || !context) return;
+    const width = Math.max(1, Math.min(4096, Math.floor(view.width || 1)));
+    const height = Math.max(1, Math.min(4096, Math.floor(view.height || 1)));
+    canvas.width = width; canvas.height = height;
+    context.clearRect(0, 0, width, height);
+    if (view.background) { context.fillStyle = view.background; context.fillRect(0, 0, width, height); }
+    for (const command of (Array.isArray(view.commands) ? view.commands : []).slice(0, 20000)) {
+      context.save();
+      context.fillStyle = command.color || "#e8eaf0";
+      context.strokeStyle = command.color || "#e8eaf0";
+      context.lineWidth = "lineWidth" in command ? Math.max(0.1, command.lineWidth || 1) : 1;
+      if (command.op === "fillRect") context.fillRect(command.x, command.y, command.width, command.height);
+      else if (command.op === "strokeRect") context.strokeRect(command.x, command.y, command.width, command.height);
+      else if (command.op === "line") { context.beginPath(); context.moveTo(command.x1, command.y1); context.lineTo(command.x2, command.y2); context.stroke(); }
+      else if (command.op === "circle") { context.beginPath(); context.arc(command.x, command.y, Math.max(0, command.radius), 0, Math.PI * 2); command.stroke ? context.stroke() : context.fill(); }
+      else if (command.op === "text") { context.font = command.font || "14px sans-serif"; context.textAlign = command.align || "left"; context.fillText(command.text, command.x, command.y); }
+      context.restore();
+    }
+  }, [view]);
+  const labels = (items: CanvasVisualization["header"]) => items?.map((item) => typeof item === "string" ? item : item.value === undefined ? item.label : item.label + ": " + item.value).map((item, index) => <span key={index}>{item}</span>);
+  return <div className="generic-playground-view">
+    {view.header?.length ? <div className="playground-view-labels header">{labels(view.header)}</div> : null}
+    <canvas ref={canvasRef} className="playground-canvas" aria-label="Playground canvas" />
+    {view.footer?.length ? <div className="playground-view-labels footer">{labels(view.footer)}</div> : null}
+  </div>;
+}
+function EnvironmentVisualization({ view }: { view: unknown }) {
+  if (view && typeof view === "object" && (view as CanvasVisualization).type === "canvas") return <CanvasView view={view as CanvasVisualization} />;
+  if (view && typeof view === "object" && (view as GridVisualization).type === "grid") {
+    const grid = view as GridVisualization;
+    const width = Math.max(1, Math.min(64, Math.floor(grid.width || 1)));
+    const height = Math.max(1, Math.min(64, Math.floor(grid.height || 1)));
+    const cells = Array.isArray(grid.cells) ? grid.cells : [];
+    const renderLabels = (items: GridVisualization["header"]) => items?.map((item, index) => <span key={index}>{typeof item === "string" ? item : item.value === undefined ? item.label : item.label + ": " + item.value}</span>);
+    return <div className="generic-playground-view">
+      {grid.header?.length ? <div className="playground-view-labels header">{renderLabels(grid.header)}</div> : null}
+      {grid.title && <strong className="generic-view-title">{grid.title}</strong>}
+      <div className="generic-playground-grid" style={{ gridTemplateColumns: "repeat(" + width + ", minmax(0, 1fr))" }}>
+        {Array.from({ length: width * height }, (_, index) => {
+          const x = index % width, y = Math.floor(index / width);
+          const cell = cells.find((item) => item.x === x && item.y === y);
+          const state = ["active", "target", "wall", "success", "danger", "muted"].includes(cell?.state ?? "") ? cell!.state : "empty";
+          return <div key={index} className={"generic-playground-cell " + state} title={cell?.label === undefined ? undefined : String(cell.label)}>{cell?.label ?? ""}</div>;
+        })}
+      </div>
+      {grid.metrics && <div className="generic-view-metrics">{grid.metrics.map((item) => <span key={item.label}>{item.label} <strong>{item.value}</strong></span>)}</div>}
+      {grid.footer?.length ? <div className="playground-view-labels footer">{renderLabels(grid.footer)}</div> : null}
+    </div>;
+  }
+  if (view && typeof view === "object" && (view as MetricsVisualization).type === "metrics") {
+    const data = view as MetricsVisualization;
+    return <div className="generic-playground-view">
+      {data.title && <strong className="generic-view-title">{data.title}</strong>}
+      {data.metrics.length > 0 && <div className="generic-view-metrics">{data.metrics.map((item) => <span key={item.label}>{item.label} <strong>{item.value}{item.unit ? " " + item.unit : ""}</strong></span>)}</div>}
+    </div>;
+  }
   return <pre>{view === null ? "Environment-defined state will appear here." : JSON.stringify(view, null, 2)}</pre>;
 }
 function TrainingStudio({
@@ -424,11 +425,12 @@ function TrainingStudio({
   setNetwork,
   onSaveNetwork,
   setWorkspace,
+  resourceRevision,
 }: {
   network: MLPNetwork | null;
   setNetwork: (network: MLPNetwork | null) => void;
   onSaveNetwork: (network: MLPNetwork) => Promise<void>;
-  environmentSource: string;
+  resourceRevision: number;
   setWorkspace: (workspace: Workspace) => void;
 }) {
   const [config, setConfig] = useState<NeuroevolutionConfig>({ ...DEFAULT_NEUROEVOLUTION_CONFIG });
@@ -458,10 +460,10 @@ function TrainingStudio({
       if (!active) return;
       setSavedPlaygrounds(playgrounds);
       setSavedCompatibleNetworks(networks);
-      setSelectedPlaygroundId((current) => current || playgrounds[0]?.id || "");
+      setSelectedPlaygroundId((current) => playgrounds.some((item) => item.id === current) ? current : playgrounds[0]?.id || "");
     }).catch((loadError) => setError(loadError instanceof Error ? loadError.message : String(loadError)));
     return () => { active = false; };
-  }, []);
+  }, [resourceRevision]);
   const compatibleNetworks = selectedPlayground
     ? savedCompatibleNetworks.filter((item) => item.network.inputSize === selectedPlayground.definition.inputSize && item.network.layers[item.network.layers.length - 1]?.units === selectedPlayground.definition.outputSize)
     : [];
@@ -734,11 +736,15 @@ function PlaygroundOverview({
   setNetwork,
   source,
   setSource,
+  onPlaygroundSaved,
+  resourceRevision,
 }: {
   network: MLPNetwork | null;
   setNetwork: (network: MLPNetwork | null) => void;
   source: string;
   setSource: (source: string) => void;
+  onPlaygroundSaved: () => void;
+  resourceRevision: number;
 }) {
   const [status, setStatus] = useState<"idle" | "running" | "completed" | "failed" | "cancelled">("idle");
   const [result, setResult] = useState<{ fitness: number; metrics?: Record<string, unknown> } | null>(null);
@@ -746,11 +752,78 @@ function PlaygroundOverview({
   const [playbackDelay, setPlaybackDelay] = useState(80);
   const [environmentMaxSteps, setEnvironmentMaxSteps] = useState(500);
   const [environmentSeed, setEnvironmentSeed] = useState(42);
-  const [renderedView, setRenderedView] = useState<unknown>(source === snakeEnvironmentSource ? {
-    type: "snake", width: 12, height: 12,
-    snake: [{ x: 6, y: 6, head: true }, { x: 5, y: 6 }, { x: 4, y: 6 }],
-    food: { x: 9, y: 3 }, score: 0, steps: 0, terminal: false,
-  } : null);
+  const [playgroundName, setPlaygroundName] = useState("Custom Playground");
+  const [playgroundId, setPlaygroundId] = useState("custom-playground");
+  const [playgroundInputSize, setPlaygroundInputSize] = useState(network?.inputSize ?? 3);
+  const [playgroundOutputSize, setPlaygroundOutputSize] = useState(network?.layers[network.layers.length - 1]?.units ?? 2);
+  const [savedPlaygrounds, setSavedPlaygrounds] = useState<SavedPlaygroundRecord[]>([]);
+  const [loadPlaygroundId, setLoadPlaygroundId] = useState("");
+  const [savePlaygroundMessage, setSavePlaygroundMessage] = useState<string | null>(null);
+  const [savePlaygroundError, setSavePlaygroundError] = useState<string | null>(null);
+  const [playgroundParametersJson, setPlaygroundParametersJson] = useState("[]");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("blank");
+  useEffect(() => {
+    let active = true;
+    listSavedPlaygrounds().then((items) => {
+      if (!active) return;
+      setSavedPlaygrounds(items);
+      setLoadPlaygroundId((current) => current || items[0]?.id || "");
+    }).catch((e) => setSavePlaygroundError(e instanceof Error ? e.message : String(e)));
+    return () => { active = false; };
+  }, [resourceRevision]);
+
+  const applySelectedTemplate = () => {
+    const template = PLAYGROUND_TEMPLATES.find((item) => item.id === selectedTemplateId);
+    if (!template) return;
+    setSource(template.source);
+    setPlaygroundName(template.name);
+    setPlaygroundId(template.id);
+    setPlaygroundInputSize(template.inputSize);
+    setPlaygroundOutputSize(template.outputSize);
+    setPlaygroundParametersJson(JSON.stringify(template.parameters, null, 2));
+    if ("network" in template && template.network) setNetwork(createMLP(template.network));
+    setRenderedView(null);
+    setResult(null); setLogs([]); setError(null); setStatus("idle");
+  };
+  const saveCurrentPlayground = async () => {
+    try {
+      if (!source.trim()) throw new Error("Environment JavaScript cannot be empty.");
+      if (!playgroundName.trim()) throw new Error("Enter a Playground name.");
+      if (!/^[a-z0-9][a-z0-9._-]*$/i.test(playgroundId.trim())) throw new Error("Playground ID may contain letters, numbers, dots, underscores, and hyphens.");
+      if (!Number.isInteger(playgroundInputSize) || playgroundInputSize < 1 || !Number.isInteger(playgroundOutputSize) || playgroundOutputSize < 1) throw new Error("Input/output dimensions must be positive integers.");
+      const numberValue = (key: string, fallback: number) => Number(source.match(new RegExp(key + "\\s*:\\s*(\\d+)"))?.[1] ?? fallback);
+      const parameters = JSON.parse(playgroundParametersJson) as PlaygroundDefinition["parameters"];
+      if (!Array.isArray(parameters) || parameters.some((item) => !item || typeof item.key !== "string" || typeof item.label !== "string" || !["number", "boolean", "string"].includes(item.type) || !["number", "boolean", "string"].includes(typeof item.default))) throw new Error("Parameters must be a JSON array of typed parameter definitions.");
+      const definition: PlaygroundDefinition = {
+        id: playgroundId.trim(), name: playgroundName.trim(),
+        version: numberValue("version", 1),
+        inputSize: playgroundInputSize, outputSize: playgroundOutputSize, parameters,
+      };
+      await savePlayground(definition, source, playgroundName.trim());
+      const items = await listSavedPlaygrounds();
+      setSavedPlaygrounds(items);
+      setLoadPlaygroundId(definition.id);
+      onPlaygroundSaved();
+      setSavePlaygroundError(null);
+      setSavePlaygroundMessage("Saved. This Playground is now available in Training Studio.");
+    } catch (e) {
+      setSavePlaygroundMessage(null);
+      setSavePlaygroundError(e instanceof Error ? e.message : String(e));
+    }
+  };
+  const loadSavedPlayground = () => {
+    const item = savedPlaygrounds.find((entry) => entry.id === loadPlaygroundId);
+    if (!item) return;
+    setSource(item.source);
+    setPlaygroundName(item.name);
+    setPlaygroundId(item.id);
+    setPlaygroundInputSize(item.definition.inputSize);
+    setPlaygroundOutputSize(item.definition.outputSize);
+    setSavePlaygroundMessage("Loaded " + item.name + ".");
+    setSavePlaygroundError(null);
+    setResult(null); setLogs([]); setStatus("idle");
+  };
+  const [renderedView, setRenderedView] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -806,36 +879,29 @@ function PlaygroundOverview({
           <div><div className="panel-kicker">CUSTOM ENVIRONMENT</div><h2>Environment module</h2></div>
           <div className="panel-tools">
             <span className="model-chip">JAVASCRIPT · ES MODULE</span>
-            <button className="secondary-button" onClick={() => {
-              setSource(snakeEnvironmentSource);
-              setNetwork(createMLP({
-                name: "Snake agent",
-                inputSize: 11,
-                layers: [{ units: 16, activation: "relu" }, { units: 3, activation: "softmax" }],
-              }));
-              setRenderedView({
-                type: "snake", width: 12, height: 12,
-                snake: [{ x: 6, y: 6, head: true }, { x: 5, y: 6 }, { x: 4, y: 6 }],
-                food: { x: 9, y: 3 }, score: 0, steps: 0, terminal: false,
-              });
-              setResult(null);
-              setLogs([]);
-              setError(null);
-              setStatus("idle");
-            }}>Load Snake</button>
+            <select aria-label="Playground template" value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
+              {PLAYGROUND_TEMPLATES.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+            </select>
+            <button className="secondary-button" onClick={applySelectedTemplate}>Apply template</button>
           </div>
+        </div>
+        <div className="playground-resource-controls">
+          <label>Playground name<input value={playgroundName} onChange={(e) => setPlaygroundName(e.target.value)} /></label>
+          <label>Stable ID<input value={playgroundId} onChange={(e) => setPlaygroundId(e.target.value)} /></label>
+          <label>Input size<input type="number" min="1" value={playgroundInputSize} onChange={(e) => setPlaygroundInputSize(e.target.valueAsNumber)} /></label>
+          <label>Output size<input type="number" min="1" value={playgroundOutputSize} onChange={(e) => setPlaygroundOutputSize(e.target.valueAsNumber)} /></label>
+          <label className="playground-parameters-field">Environment parameters (JSON)<textarea rows={3} value={playgroundParametersJson} onChange={(e) => setPlaygroundParametersJson(e.target.value)} spellCheck={false} /></label>
+          <button className="primary-button" onClick={() => void saveCurrentPlayground()}><Save size={14} /> Save Playground</button>
+          <label>Saved Playground<select value={loadPlaygroundId} onChange={(e) => setLoadPlaygroundId(e.target.value)}><option value="">Select saved Playground…</option>{savedPlaygrounds.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.definition.inputSize}→{item.definition.outputSize}</option>)}</select></label>
+          <button className="secondary-button" onClick={loadSavedPlayground} disabled={!savedPlaygrounds.some((item) => item.id === loadPlaygroundId)}>Load selected</button>
+          {savePlaygroundMessage && <span className="save-message">{savePlaygroundMessage}</span>}
+          {savePlaygroundError && <span className="environment-error">{savePlaygroundError}</span>}
         </div>
         <div className="environment-editor-meta">
           <span>Exports <code>sessionStart(ctx)</code> and optional <code>sessionEnd(ctx, result)</code></span>
           <span>{source.split("\n").length} lines</span>
         </div>
-        <div className="playground-howto">
-          <strong>How to run this example</strong>
-          <span>1. Click <b>Load Snake</b> to load the game and its matching 11-input / 3-output network.</span>
-          <span>2. Click <b>Run environment</b> to watch one Snake session.</span>
-          <span>3. Open <b>Training</b> and click <b>Start evolution</b> to train across a population.</span>
-        </div>
-        <textarea
+       <textarea
           className="environment-code"
           spellCheck={false}
           value={source}
