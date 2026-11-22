@@ -141,10 +141,12 @@ async function runSession(message: StartMessage): Promise<void> {
     const maxSteps = Number.isInteger(configuredMaxSteps) && configuredMaxSteps > 0
       ? configuredMaxSteps
       : Number.POSITIVE_INFINITY;
-    const stepDelay = () => new Promise<void>((resolve) => {
+    const stepDelay = (): Promise<void> => {
       const delay = Math.max(0, Math.min(2000, Number(message.config.stepDelayMs) || 0));
-      setTimeout(resolve, delay);
-    });
+      return delay === 0
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => setTimeout(resolve, delay));
+    };
 
     const context = {
       network: {
