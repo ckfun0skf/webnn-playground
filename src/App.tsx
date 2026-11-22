@@ -811,9 +811,6 @@ function PlaygroundOverview({
     return () => { active = false; };
   }, [resourceRevision]);
   useEffect(() => {
-    if (source.includes('id: "snake"')) { setPlaygroundName("Snake"); setPlaygroundId("snake"); setPlaygroundInputSize(11); setPlaygroundOutputSize(3); }
-  }, [source]);
-  useEffect(() => {
     if (source.includes('id: "snake"')) {
       setPlaygroundName("Snake");
       setPlaygroundId("snake");
