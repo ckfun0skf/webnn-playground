@@ -38,6 +38,7 @@ export default function ResourceLibrary({ source, onLoadPlayground, onLoadNetwor
   const [id, setId] = useState("custom-playground");
   const [inputSize, setInputSize] = useState(3);
   const [outputSize, setOutputSize] = useState(2);
+  const [parametersJson, setParametersJson] = useState("[]");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -60,6 +61,9 @@ export default function ResourceLibrary({ source, onLoadPlayground, onLoadNetwor
       if (!/^[a-z0-9][a-z0-9._-]*$/i.test(id.trim())) throw new Error("ID may contain letters, numbers, dots, underscores, and hyphens.");
       if (!Number.isInteger(inputSize) || inputSize < 1 || !Number.isInteger(outputSize) || outputSize < 1) throw new Error("Input and output sizes must be positive integers.");
       const definition = inferDefinition(source, name.trim(), id.trim(), inputSize, outputSize);
+      const parameters = JSON.parse(parametersJson);
+      if (!Array.isArray(parameters) || parameters.some((item) => !item || typeof item.key !== "string" || typeof item.label !== "string" || !["number", "boolean", "string"].includes(item.type) || !["number", "boolean", "string"].includes(typeof item.default))) throw new Error("Parameters must be a JSON array of typed parameter definitions.");
+      definition.parameters = parameters;
       definition.id = id.trim(); definition.name = name.trim(); definition.inputSize = inputSize; definition.outputSize = outputSize;
       await savePlayground(definition, source, name.trim());
       onChanged(); setMessage("Playground saved to the local library."); setError(null);
@@ -87,6 +91,7 @@ export default function ResourceLibrary({ source, onLoadPlayground, onLoadNetwor
         <label>Input dimensions<input type="number" min="1" value={inputSize} onChange={(e) => setInputSize(e.target.valueAsNumber)} /></label>
         <label>Output dimensions<input type="number" min="1" value={outputSize} onChange={(e) => setOutputSize(e.target.valueAsNumber)} /></label>
       </div>
+      <label className="resource-parameters-label">Typed parameters (JSON array)<textarea rows={4} value={parametersJson} onChange={(e) => setParametersJson(e.target.value)} spellCheck={false} /></label>
       <button className="primary-button" onClick={() => void saveCurrent()}><Save size={14} /> Save Playground</button>
       {message && <p className="save-message">{message}</p>}
     </section>
