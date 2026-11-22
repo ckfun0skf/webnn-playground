@@ -565,7 +565,7 @@ function TrainingStudio({
       await saveTrainingRun({
         id: "training-" + crypto.randomUUID(), name: selectedPlayground.name + " · " + new Date().toLocaleString(), status: "completed",
         playgroundId: selectedPlayground.id, playgroundName: selectedPlayground.name, playgroundVersion: selectedPlayground.version,
-        playgroundSource: selectedPlayground.source, initialNetwork: structuredClone(activeNetwork), evolutionConfig: structuredClone(config),
+        playgroundSource: selectedPlayground.source, initialNetwork: structuredClone(activeNetwork), evolutionConfig: structuredClone(config) as unknown as Record<string, unknown>,
         environmentConfig: { maxSteps: environmentMaxSteps, stepDelayMs: playbackDelay, seed: config.environmentSeed, ...environmentParameters },
         bestNetwork, bestFitness: result.best.fitness, generationHistory: structuredClone(result.history) as unknown as Record<string, unknown>[],
         createdAt: Date.now(), completedAt: Date.now(),
