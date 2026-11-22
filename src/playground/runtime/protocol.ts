@@ -10,7 +10,7 @@ export type WorkerRequest =
       config: Record<string, unknown>;
       renderEnabled: boolean;
       reportEnabled: boolean;
-      inferenceBackend: "auto" | "low-power" | "high-performance" | "webnn-cpu" | "javascript";
+      inferenceBackend: "auto" | "npu" | "low-power" | "high-performance" | "webnn-cpu" | "javascript";
     }
   | { type: "finish-ack" }
   | { type: "cancel"; reason: string };

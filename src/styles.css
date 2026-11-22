@@ -398,7 +398,13 @@ h1 { margin: 0; font-size: 25px; font-weight: 600; letter-spacing: -.7px; }
 
 
 /* Population density, completed-agent dimming, and replay inspection */
-.population-grid-controls { display: flex; justify-content: flex-end; padding: 0 14px 10px; }
+.population-grid-controls { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 18px; padding: 0 14px 10px; }
+.population-grid-controls .population-hide-finished { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+.population-grid-controls .population-hide-finished input { accent-color: #9385df; }
+.population-header-stats { display: flex; align-items: center; gap: 16px; color: #8f99a8; font-size: 9px; }
+.population-header-stats > span:first-child { display: inline-flex; align-items: center; gap: 6px; }
+.population-header-stats strong { color: #d8d1ff; font: 600 11px var(--mono); }
+.population-all-finished { padding: 12px 16px 16px; text-align: center; }
 .population-grid-controls label { display: flex; align-items: center; gap: 8px; color: #9ca5b3; font-size: 9px; }
 .population-grid-controls select { padding: 5px 8px; color: #d0d6e0; background: #151a21; border: 1px solid #343d49; border-radius: 5px; font-size: 9px; }
 .population-agent-card { display: block; width: 100%; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: opacity .16s ease, border-color .16s ease; }
