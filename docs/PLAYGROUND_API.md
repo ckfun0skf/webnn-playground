@@ -56,7 +56,8 @@ A session must call `ctx.finish({ fitness, metrics? })` exactly once. The fitnes
 | `ctx.report(metrics)` | Send progress metrics to the host UI. |
 | `ctx.render(view)` | Publish an environment-defined visualization snapshot to the host UI. The view can be any structured-clone-compatible data; a renderer can interpret its shape. |
 | `ctx.random()` | Deterministic pseudo-random number based on the session seed. |
-| `ctx.step()` | Advance one simulation step, apply the configured playback delay, and return `false` when the configured `maxSteps` budget is reached. |\n| `ctx.yield()` | Yield to the Worker event loop without consuming a simulation step. |
+| `ctx.step()` | Advance one simulation step, apply the configured playback delay, and return `false` when the configured `maxSteps` budget is reached. |
+| `ctx.yield()` | Yield to the Worker event loop without consuming a simulation step. |
 | `ctx.signal` | AbortSignal for cooperative cancellation. |
 | `ctx.session` | Read-only session metadata: ID, generation, candidate index, and seed. |
 | `ctx.config` | Read-only Playground parameters and runtime settings. |
@@ -69,7 +70,8 @@ Options:
 - `source`: complete environment ES module source.
 - `network`: validated canonical MLP network.
 - `session`: session ID, generation, candidate index, and seed.
-- `config`: optional Playground parameters, including `maxSteps` and `stepDelayMs`.\n- `session.seed`: deterministic environment seed; candidates in one fair-comparison population should share this seed.
+- `config`: optional Playground parameters, including `maxSteps` and `stepDelayMs`.
+- `session.seed`: deterministic environment seed; candidates in one fair-comparison population should share this seed.
 - `timeoutMs`: optional session time limit (default 30 seconds).
 - `signal`: optional AbortSignal for cancellation.
 - `onReport`: optional callback for progress metrics.
