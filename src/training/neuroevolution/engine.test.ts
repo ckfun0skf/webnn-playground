@@ -79,6 +79,7 @@ describe("runNeuroevolution", () => {
       seed: 1,
       environmentSeed: 1,
       includeInitialNetwork: true,
+      maxConcurrentEvaluations: 2,
     };
 
     await expect(runNeuroevolution({
