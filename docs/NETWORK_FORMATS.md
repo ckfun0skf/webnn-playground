@@ -4,9 +4,9 @@ The Network Library supports two interchange formats.
 
 ## Native JSON
 
-Native JSON is the lossless WebNN Playground format. It preserves the complete MLPNetwork representation, including schema version, network identity, layer IDs, activation functions, bias settings, weights, biases, and metadata.
+Native JSON is the full-fidelity WebNN Playground format. It serializes the complete MLPNetwork representation, including schema version, network and layer IDs, activation functions, bias settings, weights, biases, and metadata.
 
-Import validates the model against the current native schema. Imported networks receive new network and layer IDs so an import never overwrites an existing library entry.
+Import validates the model against the current native schema. Imported networks receive new network and layer IDs so an import never overwrites an existing library entry; all model architecture, parameters, and metadata are retained.
 
 ## ONNX
 
