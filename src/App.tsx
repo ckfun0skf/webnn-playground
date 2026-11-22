@@ -124,8 +124,10 @@ export default function App() {
             <p className="page-subtitle">{getSubtitle(workspace)}</p>
           </div>
           <div className="heading-actions">
-            <button className="secondary-button"><FolderOpen size={15} /> Open project</button>
-            <button className="primary-button"><Plus size={15} /> New {workspace === "playground" ? "environment" : workspace === "network" ? "network" : "experiment"}</button>
+            {workspace === "network" ? (
+              <button className="secondary-button" onClick={() => setWorkspace("library")}><FolderOpen size={15} /> Load Network</button>
+            ) : <button className="secondary-button"><FolderOpen size={15} /> Open project</button>}
+            {workspace !== "network" && <button className="primary-button"><Plus size={15} /> New {workspace === "playground" ? "environment" : "experiment"}</button>}
           </div>
         </div>
         {workspace === "network" && <NetworkOverview network={network} setNetwork={setNetwork} onSaveNetwork={saveToLibrary} inputText={inputText} setInputText={setInputText} prediction={prediction} setPrediction={setPrediction} inferenceError={inferenceError} setInferenceError={setInferenceError} />}
@@ -891,10 +893,6 @@ function PlaygroundOverview({
         </div>
         <div className="playground-network-controls"><label>Select Network<select value={selectedNetworkId} onChange={(event) => setSelectedNetworkId(event.target.value)}><option value="">Select a compatible Network…</option>{compatibleNetworks.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><button className="secondary-button" onClick={() => setShowNetworkBuilder(true)}><Plus size={14} /> Create</button><button className="primary-button" onClick={runEnvironment} disabled={!selectedNetwork || status === "running"}><Play size={14} /> Run Environment</button></div>
         <div className="playground-step-heading">3. Write environment code</div>
-        <div className="playground-network-controls"><label>Select Network<select value={selectedNetworkId} onChange={(event) => setSelectedNetworkId(event.target.value)}><option value="">Select a compatible Network…</option>{compatibleNetworks.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><button className="secondary-button" onClick={() => setShowNetworkBuilder(true)}><Plus size={14} /> Create</button><button className="primary-button" onClick={runEnvironment} disabled={!selectedNetwork || status === "running"}><Play size={14} /> Run Environment</button></div>
-        <div className="playground-step-heading">3. Write environment code</div>
-        <div className="playground-network-controls"><label>Select Network<select value={selectedNetworkId} onChange={(event) => setSelectedNetworkId(event.target.value)}><option value="">Select a compatible Network…</option>{compatibleNetworks.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><button className="secondary-button" onClick={() => setShowNetworkBuilder(true)}><Plus size={14} /> Create</button><button className="primary-button" onClick={runEnvironment} disabled={!selectedNetwork || status === "running"}><Play size={14} /> Run Environment</button></div>
-        <div className="playground-step-heading">3. Write environment code</div>
         <div className="environment-editor-meta">
           <span>Exports <code>sessionStart(ctx)</code> and optional <code>sessionEnd(ctx, result)</code></span>
           <span>{source.split("\n").length} lines</span>
@@ -1014,6 +1012,15 @@ function NetworkLibrary({
                 <span>{record.network.inputSize} inputs · {record.network.layers.map((layer) => layer.units).join(" → ")} · Updated {new Date(record.updatedAt).toLocaleString()}</span>
               </div>
               <button className="secondary-button" onClick={() => onLoad(record.network)}>Load</button>
+              <button className="secondary-button" onClick={async () => {
+                const nextName = window.prompt("Rename Network", record.name)?.trim();
+                if (!nextName || nextName === record.name) return;
+                try {
+                  const updated = { ...record.network, name: nextName };
+                  await saveNetwork(updated, nextName);
+                  setRecords((current) => current.map((item) => item.id === record.id ? { ...item, name: nextName, network: updated, updatedAt: Date.now() } : item));
+                } catch (renameError) { setError(renameError instanceof Error ? renameError.message : String(renameError)); }
+              }}>Rename</button>
               <button className="small-icon-button" title="Delete saved network" aria-label="Delete saved network" onClick={() => void remove(record.id)}><span>×</span></button>
             </div>
           ))}
