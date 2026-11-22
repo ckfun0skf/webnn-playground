@@ -38,6 +38,7 @@ describe("runNeuroevolution", () => {
         mutationScale: 0.1,
         evaluationTimeoutMs: 1000,
         seed: 17,
+        environmentSeed: 1234,
         includeInitialNetwork: true,
       },
       onCandidate: (candidate) => candidateEvents.push(candidate.candidateIndex),
@@ -71,6 +72,7 @@ describe("runNeuroevolution", () => {
       mutationScale: 0.1,
       evaluationTimeoutMs: 1000,
       seed: 1,
+      environmentSeed: 1,
       includeInitialNetwork: true,
     };
 
