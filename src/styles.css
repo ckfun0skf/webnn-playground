@@ -544,3 +544,83 @@ h1 { margin: 0; font-size: 25px; font-weight: 600; letter-spacing: -.7px; }
   .network-builder-dimensions { grid-template-columns: 1fr; }
   .playground-parameter-fields { grid-template-columns: repeat(2, minmax(0,1fr)); }
 }
+
+
+/* Consistent form controls across Network, Playground, Training and Libraries */
+:root {
+  --control-height: 36px;
+  --control-bg: #11161d;
+  --control-border: #343d49;
+  --control-focus: #9385df;
+}
+input:not([type="checkbox"]):not([type="range"]),
+select,
+textarea {
+  font: 11px var(--mono);
+  color: #dce3ed;
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
+  border-radius: 6px;
+  min-height: var(--control-height);
+  padding: 7px 10px;
+}
+input:not([type="checkbox"]):not([type="range"]):focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--control-focus);
+  box-shadow: 0 0 0 2px #9385df22;
+}
+input:disabled, select:disabled, textarea:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+button:disabled { opacity: .45; cursor: not-allowed; }
+.generic-playground-grid {
+  width: min(100%, 520px);
+  aspect-ratio: 1 / 1;
+  min-height: 0;
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 2px;
+  padding: 5px;
+  background: #0e131a;
+  border: 1px solid #303947;
+  border-radius: 8px;
+}
+.generic-playground-cell {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 2px;
+  border: 0;
+  background: #1a222c;
+}
+.generic-playground-cell.empty { background: #141b24; }
+.generic-playground-cell.active { background: #9bd8a7; box-shadow: 0 0 8px #9bd8a755; }
+.generic-playground-cell.success { background: #367c5c; }
+.generic-playground-cell.target { background: #e58b73; border-radius: 50%; transform: scale(.68); }
+.generic-playground-cell.wall { background: #697586; }
+.generic-playground-cell.danger { background: #b75c66; }
+.generic-playground-cell.muted { background: #252d38; }
+.playground-resource-controls label,
+.playground-parameter-fields label,
+.network-builder-dialog label,
+.resource-form-grid label {
+  color: #aeb8c7;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.playground-network-controls label { color: #aeb8c7; font-size: 10px; }
+.playground-resource-controls input,
+.playground-resource-controls select,
+.playground-parameter-fields input,
+.playground-parameter-fields select,
+.network-builder-dialog input:not([type="checkbox"]),
+.network-builder-dialog select,
+.resource-form-grid input,
+.resource-form-grid select {
+  width: 100%;
+  min-width: 0;
+}
