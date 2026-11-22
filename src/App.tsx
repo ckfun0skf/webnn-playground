@@ -557,7 +557,7 @@ function TrainingStudio({
       });
       setBest(result.best);
       const bestNetwork = { ...structuredClone(result.best.network), id: crypto.randomUUID(), name: selectedPlayground.name + " best · " + new Date().toLocaleDateString() };
-      await saveNetwork(bestNetwork);
+      await onSaveNetwork(bestNetwork);
       await saveTrainingRun({
         id: "training-" + crypto.randomUUID(), name: selectedPlayground.name + " · " + new Date().toLocaleString(), status: "completed",
         playgroundId: selectedPlayground.id, playgroundName: selectedPlayground.name, playgroundVersion: selectedPlayground.version,
