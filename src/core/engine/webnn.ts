@@ -19,9 +19,10 @@ interface MLContextLike {
  writeTensor(tensor: MLTensor, data: Float32Array): void;
  dispatch(graph: MLGraph, inputs: Record<string, MLTensor>, outputs: Record<string, MLTensor>): void;
  readTensor(tensor: MLTensor): Promise<ArrayBuffer>; destroy(): void;
+ readonly accelerated: boolean;
 }
 interface NavigatorWithML extends Navigator { ml?: { createContext(options?: MLContextOptions): Promise<MLContextLike> } }
-export interface WebNNPredictor { predict(input: readonly number[]): Promise<number[]>; dispose(): void }
+export interface WebNNPredictor { predict(input: readonly number[]): Promise<number[]>; dispose(): void; accelerated: boolean }
 
 export async function createWebNNPredictor(network: MLPNetwork): Promise<WebNNPredictor> {
  assertValidNetwork(network);
@@ -65,6 +66,7 @@ export async function createWebNNPredictor(network: MLPNetwork): Promise<WebNNPr
   inputTensor = await context.createTensor({ dataType: "float32", shape: [1, network.inputSize], writable: true });
   outputTensor = await context.createTensor({ dataType: "float32", shape: [1, previousSize], readable: true });
   return {
+   accelerated: context.accelerated,
    async predict(values) {
     if (values.length !== network.inputSize) throw new Error(`Expected ${network.inputSize} input values, received ${values.length}.`);
     if (values.some(value => !Number.isFinite(value))) throw new Error("Input values must all be finite numbers.");
