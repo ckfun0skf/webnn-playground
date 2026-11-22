@@ -938,8 +938,19 @@ function PlaygroundOverview({
             }}>Load Snake</button>
           </div>
         </div>
-        <div className="playground-resource-controls">\n          <label>Playground name<input value={playgroundName} onChange={(e) => setPlaygroundName(e.target.value)} /></label>\n          <label>Stable ID<input value={playgroundId} onChange={(e) => setPlaygroundId(e.target.value)} /></label>\n          <label>Input size<input type="number" min="1" value={playgroundInputSize} onChange={(e) => setPlaygroundInputSize(e.target.valueAsNumber)} /></label>\n          <label>Output size<input type="number" min="1" value={playgroundOutputSize} onChange={(e) => setPlaygroundOutputSize(e.target.valueAsNumber)} /></label>\n          <label className="playground-parameters-field">Environment parameters (JSON)<textarea rows={3} value={playgroundParametersJson} onChange={(e) => setPlaygroundParametersJson(e.target.value)} spellCheck={false} /></label>
-          <button className="primary-button" onClick={() => void saveCurrentPlayground()}><Save size={14} /> Save Playground</button>\n          <label>Saved Playground<select value={loadPlaygroundId} onChange={(e) => setLoadPlaygroundId(e.target.value)}><option value="">Select saved Playground…</option>{savedPlaygrounds.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.definition.inputSize}→{item.definition.outputSize}</option>)}</select></label>\n          <button className="secondary-button" onClick={loadSavedPlayground} disabled={!savedPlaygrounds.some((item) => item.id === loadPlaygroundId)}>Load selected</button>\n          {savePlaygroundMessage && <span className="save-message">{savePlaygroundMessage}</span>}\n          {savePlaygroundError && <span className="environment-error">{savePlaygroundError}</span>}\n        </div>\n        <div className="environment-editor-meta">
+        <div className="playground-resource-controls">
+          <label>Playground name<input value={playgroundName} onChange={(e) => setPlaygroundName(e.target.value)} /></label>
+          <label>Stable ID<input value={playgroundId} onChange={(e) => setPlaygroundId(e.target.value)} /></label>
+          <label>Input size<input type="number" min="1" value={playgroundInputSize} onChange={(e) => setPlaygroundInputSize(e.target.valueAsNumber)} /></label>
+          <label>Output size<input type="number" min="1" value={playgroundOutputSize} onChange={(e) => setPlaygroundOutputSize(e.target.valueAsNumber)} /></label>
+          <label className="playground-parameters-field">Environment parameters (JSON)<textarea rows={3} value={playgroundParametersJson} onChange={(e) => setPlaygroundParametersJson(e.target.value)} spellCheck={false} /></label>
+          <button className="primary-button" onClick={() => void saveCurrentPlayground()}><Save size={14} /> Save Playground</button>
+          <label>Saved Playground<select value={loadPlaygroundId} onChange={(e) => setLoadPlaygroundId(e.target.value)}><option value="">Select saved Playground…</option>{savedPlaygrounds.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.definition.inputSize}→{item.definition.outputSize}</option>)}</select></label>
+          <button className="secondary-button" onClick={loadSavedPlayground} disabled={!savedPlaygrounds.some((item) => item.id === loadPlaygroundId)}>Load selected</button>
+          {savePlaygroundMessage && <span className="save-message">{savePlaygroundMessage}</span>}
+          {savePlaygroundError && <span className="environment-error">{savePlaygroundError}</span>}
+        </div>
+        <div className="environment-editor-meta">
           <span>Exports <code>sessionStart(ctx)</code> and optional <code>sessionEnd(ctx, result)</code></span>
           <span>{source.split("\n").length} lines</span>
         </div>
