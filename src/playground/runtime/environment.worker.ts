@@ -1,4 +1,5 @@
 import { compileMLP } from "../../core/engine";
+import { createWebNNPredictor } from "../../core/engine/webnn";
 import type { MLPNetwork } from "../../core/model";
 import type { PlaygroundSessionMetadata, PlaygroundSessionResult } from "../api/types";
 
@@ -10,12 +11,14 @@ type StartMessage = {
   config: Record<string, unknown>;
   renderEnabled: boolean;
   reportEnabled: boolean;
+  inferenceBackend: "auto" | "javascript";
 };
 type IncomingMessage =
   | StartMessage
   | { type: "finish-ack" }
   | { type: "cancel"; reason: string };
 type OutgoingMessage =
+  | { type: "backend"; backend: "webnn" | "javascript"; detail: string }
   | { type: "report"; metrics: Record<string, unknown> }
   | { type: "render"; view: unknown }
   | { type: "finish"; result: PlaygroundSessionResult }
@@ -60,8 +63,44 @@ async function runSession(message: StartMessage): Promise<void> {
     new Blob([message.source], { type: "text/javascript" }),
   );
 
+  let disposePredictor: (() => void) | undefined;
   try {
-    const predictor = compileMLP(message.network);
+    let predictor: (input: readonly number[]) => number[] | Promise<number[]>;
+    if (message.inferenceBackend === "auto") {
+      try {
+        const webnnPredictor = await createWebNNPredictor(message.network);
+        disposePredictor = webnnPredictor.dispose;
+        predictor = async (input) => {
+          try {
+            return await webnnPredictor.predict(input);
+          } catch (inferenceError) {
+            try { disposePredictor?.(); } catch { /* Continue with the CPU fallback. */ }
+            disposePredictor = undefined;
+            const cpuPredictor = compileMLP(message.network);
+            predictor = cpuPredictor;
+            scope.postMessage({
+              type: "backend",
+              backend: "javascript",
+              detail: `WebNN inference failed; switched to JavaScript CPU inference. ${inferenceError instanceof Error ? inferenceError.message : String(inferenceError)}`,
+            });
+            return cpuPredictor(input);
+          }
+        };
+        scope.postMessage({
+          type: "backend",
+          backend: "webnn",
+          detail: webnnPredictor.accelerated
+            ? "WebNN reports accelerated=true (GPU/NPU-class execution requested with low-power preference). The browser does not expose the exact device."
+            : "WebNN reports accelerated=false; this context is not using a massively parallel accelerator.",
+        });
+      } catch (webnnError) {
+        predictor = compileMLP(message.network);
+        scope.postMessage({ type: "backend", backend: "javascript", detail: `WebNN unavailable; using JavaScript CPU inference. ${webnnError instanceof Error ? webnnError.message : String(webnnError)}` });
+      }
+    } else {
+      predictor = compileMLP(message.network);
+      scope.postMessage({ type: "backend", backend: "javascript", detail: "JavaScript CPU inference selected." });
+    }
     const environment = await import(/* @vite-ignore */ moduleUrl);
     if (controller.signal.aborted) {
       scope.postMessage({ type: "cancelled" });
@@ -92,7 +131,7 @@ async function runSession(message: StartMessage): Promise<void> {
           if (!Array.isArray(input) || input.some((value) => !Number.isFinite(value))) {
             throw new Error("Network input must be an array of finite numbers.");
           }
-          return predictor(input);
+          return await predictor(input);
         },
       },
       finish(result: PlaygroundSessionResult): Promise<void> {
@@ -145,6 +184,7 @@ async function runSession(message: StartMessage): Promise<void> {
       scope.postMessage({ type: "error", ...serializeError(error) });
     }
   } finally {
+    try { disposePredictor?.(); } catch { /* Worker termination remains the final cleanup boundary. */ }
     URL.revokeObjectURL(moduleUrl);
     activeController = null;
     pendingFinishResolve = null;

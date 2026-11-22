@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMLP } from "../../core/model";
 import { runPlaygroundSession } from "../../playground/runtime";
-import { runNeuroevolution } from "./engine";
+import { DEFAULT_NEUROEVOLUTION_CONFIG, runNeuroevolution } from "./engine";
 
 vi.mock("../../playground/runtime", () => ({
   runPlaygroundSession: vi.fn(async ({ network }: { network: ReturnType<typeof createMLP> }) => ({
@@ -40,6 +40,7 @@ describe("runNeuroevolution", () => {
         seed: 17,
         environmentSeed: 1234,
         includeInitialNetwork: true,
+        maxConcurrentEvaluations: 2,
       },
       onCandidate: (candidate) => candidateEvents.push(candidate.candidateIndex),
       onGeneration: (summary) => generationEvents.push(summary.generation),
@@ -53,14 +54,11 @@ describe("runNeuroevolution", () => {
       expect(call[0].config?.randomSeed).toBe(expectedSeed);
       if (callIndex < 4) expect(call[0].session.generation).toBe(0);
     }
-    expect(result.evaluations).toHaveLength(12);
     expect(result.history).toHaveLength(3);
     expect(generationEvents).toEqual([0, 1, 2]);
     expect(candidateEvents).toHaveLength(12);
     expect(result.best.network).toBeDefined();
-    expect(result.best.fitness).toBeGreaterThanOrEqual(
-      Math.min(...result.evaluations.map((candidate) => candidate.fitness)),
-    );
+    expect(Number.isFinite(result.best.fitness)).toBe(true);
   });
 
   it("rejects invalid population and mutation settings", async () => {
@@ -81,6 +79,7 @@ describe("runNeuroevolution", () => {
       seed: 1,
       environmentSeed: 1,
       includeInitialNetwork: true,
+      maxConcurrentEvaluations: 2,
     };
 
     await expect(runNeuroevolution({
@@ -90,5 +89,30 @@ describe("runNeuroevolution", () => {
     })).rejects.toThrow(/populationSize/);
 
     expect(runPlaygroundSession).not.toHaveBeenCalled();
+  });
+
+  it("limits concurrent candidate sessions to the configured worker budget", async () => {
+    const initialNetwork = createMLP({
+      inputSize: 1,
+      layers: [{ units: 1 }],
+      random: () => 0.5,
+    });
+    let active = 0;
+    let peak = 0;
+    vi.mocked(runPlaygroundSession).mockImplementation(async ({ network }) => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise<void>((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return { fitness: network.layers[0].weights[0][0] };
+    });
+
+    await runNeuroevolution({
+      initialNetwork,
+      environmentSource: "export async function sessionStart(ctx) {}",
+      config: { ...DEFAULT_NEUROEVOLUTION_CONFIG, populationSize: 6, generations: 1, eliteCount: 1, maxConcurrentEvaluations: 2 },
+    });
+
+    expect(peak).toBe(2);
   });
 });

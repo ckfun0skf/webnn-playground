@@ -57,7 +57,12 @@ export interface PlaygroundEnvironmentModule {
   ): void | Promise<void>;
 }
 
+export type InferenceBackend = "auto" | "javascript";
+export interface InferenceBackendStatus { backend: "webnn" | "javascript"; detail: string }
+
 export interface RunPlaygroundSessionOptions {
+  inferenceBackend?: InferenceBackend;
+  onBackend?: (status: InferenceBackendStatus) => void;
   source: string;
   network: MLPNetwork;
   session: PlaygroundSessionMetadata;

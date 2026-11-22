@@ -10,11 +10,13 @@ export type WorkerRequest =
       config: Record<string, unknown>;
       renderEnabled: boolean;
       reportEnabled: boolean;
+      inferenceBackend: "auto" | "javascript";
     }
   | { type: "finish-ack" }
   | { type: "cancel"; reason: string };
 
 export type WorkerMessage =
+  | { type: "backend"; backend: "webnn" | "javascript"; detail: string }
   | { type: "report"; metrics: Record<string, unknown> }
   | { type: "render"; view: unknown }
   | { type: "finish"; result: PlaygroundSessionResult }
