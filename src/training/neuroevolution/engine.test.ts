@@ -47,7 +47,10 @@ describe("runNeuroevolution", () => {
 
     expect(vi.mocked(runPlaygroundSession)).toHaveBeenCalledTimes(12);
     for (const [callIndex, call] of vi.mocked(runPlaygroundSession).mock.calls.entries()) {
-      expect(call[0].session.seed).toBe(1234);
+      const generation = Math.floor(callIndex / 4);
+      const expectedSeed = (1234 + Math.imul(generation, 0x9e3779b9)) >>> 0;
+      expect(call[0].session.seed).toBe(expectedSeed);
+      expect(call[0].config?.randomSeed).toBe(expectedSeed);
       if (callIndex < 4) expect(call[0].session.generation).toBe(0);
     }
     expect(result.evaluations).toHaveLength(12);

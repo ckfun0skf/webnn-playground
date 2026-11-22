@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createMLP } from "../../core/model";
+import { createMLP, type MLPNetwork } from "../../core/model";
 import { createSeededRandom } from "../../playground/runtime/random";
-import { crossoverNetworks, createRandomNetwork, mutateNetwork } from "./genetics";
+import { cloneNetwork, crossoverNetworks, createRandomNetwork, mutateNetwork } from "./genetics";
 
 function createTemplate() {
   return createMLP({
@@ -38,6 +38,19 @@ describe("neuroevolution genetics", () => {
     const childB = crossoverNetworks(parentA, parentB, "child", createSeededRandom(99));
 
     expect(childA).toEqual(childB);
+  });
+
+  it("normalizes legacy layers without a useBias flag before crossover", () => {
+    const current = createTemplate();
+    const legacy = {
+      ...current,
+      layers: current.layers.map(({ useBias: _useBias, ...layer }) => layer),
+    } as MLPNetwork;
+    const normalized = cloneNetwork(legacy, "legacy-normalized");
+    const randomCandidate = createRandomNetwork(legacy, "random-candidate", createSeededRandom(8));
+
+    expect(normalized.layers.every((layer) => layer.useBias === true)).toBe(true);
+    expect(() => crossoverNetworks(normalized, randomCandidate, "legacy-child", createSeededRandom(9))).not.toThrow();
   });
 
   it("mutates parameters without changing the source network", () => {

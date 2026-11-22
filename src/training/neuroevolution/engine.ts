@@ -155,13 +155,14 @@ export async function runNeuroevolution(
         throw new Error(options.signal.reason?.toString() ?? "Neuroevolution cancelled.");
       }
       const candidateId = `${runId}-g${generation}-c${candidateIndex}`;
-      const seed = config.environmentSeed;
+      const baseEnvironmentSeed = Number(options.configForEnvironment?.randomSeed ?? config.environmentSeed);
+      const seed = (baseEnvironmentSeed + Math.imul(generation, 0x9e3779b9)) >>> 0;
       try {
         const result = await runPlaygroundSession({
           source: options.environmentSource,
           network,
           session: { sessionId: candidateId, generation, candidateIndex, seed },
-          config: options.configForEnvironment,
+          config: { ...options.configForEnvironment, randomSeed: seed },
           timeoutMs: config.evaluationTimeoutMs,
           signal: options.signal,
           onRender: (view) => options.onPopulationRender?.(generation, candidateIndex, view),

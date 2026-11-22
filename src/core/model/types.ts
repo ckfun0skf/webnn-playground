@@ -12,6 +12,7 @@ export interface DenseLayer {
   type: "dense";
   units: number;
   activation: ActivationFunction;
+  useBias?: boolean;
   /** One row per output neuron; each row contains one weight per input. */
   weights: number[][];
   /** One bias per output neuron. */
@@ -34,6 +35,7 @@ export interface MLPNetwork {
 export interface DenseLayerDefinition {
   units: number;
   activation?: ActivationFunction;
+  useBias?: boolean;
 }
 
 export interface CreateMLPOptions {

@@ -5,7 +5,8 @@ export const playgroundDefinition = {
   inputSize: 11,
   outputSize: 3,
   parameters: [
-    { key: "maxSteps", label: "Maximum steps", type: "number", default: 500, min: 1, max: 10000, step: 100, description: "Hard limit for one Snake session." },
+    { key: "maxStepWithoutApple", label: "Maximum steps without an apple", type: "number", default: 144, min: 1, max: 10000, step: 1, description: "End the session after this many consecutive steps without eating an apple." },
+    { key: "randomSeed", label: "Random seed", type: "randomSeed", default: 42, description: "Shared environment seed. Training uses the same resolved seed for every candidate in a generation." },
   ],
 };
 
@@ -95,6 +96,8 @@ export async function sessionStart(ctx) {
   let food = randomFood(ctx, snake);
   let score = 0;
   let steps = 0;
+  let stepsSinceApple = 0;
+  const maxStepWithoutApple = Math.max(1, Number(ctx.config.maxStepWithoutApple) || 144);
   let terminal = false;
 
   render(ctx, snake, food, score, steps, direction, terminal);
@@ -110,12 +113,14 @@ export async function sessionStart(ctx) {
     const hitBody = bodyToCheck.some((segment) => sameCell(segment, nextHead));
 
     steps += 1;
+    stepsSinceApple += 1;
     if (hitWall || hitBody) {
       terminal = true;
     } else {
       snake = [nextHead, ...snake];
       if (eating) {
         score += 1;
+        stepsSinceApple = 0;
         food = randomFood(ctx, snake);
         if (!food) terminal = true;
       } else {
@@ -123,12 +128,13 @@ export async function sessionStart(ctx) {
       }
     }
 
-    ctx.report({ score, steps, terminal });
+    if (!terminal && stepsSinceApple > maxStepWithoutApple) terminal = true;
+    ctx.report({ score, steps, stepsSinceApple, terminal });
     render(ctx, snake, food, score, steps, direction, terminal);
     if (terminal || !(await ctx.step())) break;
   }
 
   if (ctx.signal.aborted) return;
   // Fitness is exactly the number of apples eaten. Survival time never adds points.
-  await ctx.finish({ fitness: score, metrics: { score, steps, terminal } });
+  await ctx.finish({ fitness: score, metrics: { score, steps, stepsSinceApple, terminal } });
 }

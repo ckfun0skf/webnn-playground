@@ -14,7 +14,8 @@ export const playgroundDefinition = {
   inputSize: 11,
   outputSize: 3,
   parameters: [
-    { key: "maxSteps", label: "Maximum steps", type: "number", default: 500, min: 1, max: 10000 }
+    { key: "maxStepWithoutApple", label: "Maximum steps without an apple", type: "number", default: 144, min: 1, max: 10000 },
+    { key: "randomSeed", label: "Random seed", type: "randomSeed", default: 42 }
   ]
 };
 ```
@@ -112,7 +113,7 @@ Unknown view types are shown as formatted JSON. Templates are ordinary Playgroun
 | `ctx.report(metrics)` | Send progress metrics to the host UI. |
 | `ctx.render(view)` | Publish an environment-defined visualization snapshot to the host UI. The view can be any structured-clone-compatible data; a renderer can interpret its shape. |
 | `ctx.random()` | Deterministic pseudo-random number based on the session seed. |
-| `ctx.step()` | Advance one simulation step, apply the configured playback delay, and return `false` when the configured `maxSteps` budget is reached. |
+| `ctx.step()` | Advance one simulation step, apply the configured playback delay, and return `false` when the optional runtime safety step budget is reached. Environment-specific limits (such as Snake’s `maxStepWithoutApple`) belong in Playground parameters and are enforced by the environment code. |
 | `ctx.yield()` | Yield to the Worker event loop without consuming a simulation step. |
 | `ctx.signal` | AbortSignal for cooperative cancellation. |
 | `ctx.session` | Read-only session metadata: ID, generation, candidate index, and seed. |
@@ -126,8 +127,8 @@ Options:
 - `source`: complete environment ES module source.
 - `network`: validated canonical MLP network.
 - `session`: session ID, generation, candidate index, and seed.
-- `config`: optional Playground parameters, including `maxSteps` and `stepDelayMs`.
-- `session.seed`: deterministic environment seed; candidates in one fair-comparison population should share this seed.
+- `config`: optional Playground parameters, plus runtime settings such as `stepDelayMs` and an optional safety step budget.
+- `session.seed`: deterministic environment seed. Neuroevolution resolves a `randomSeed` parameter once per generation and supplies the same seed to every candidate in that generation; the seed changes deterministically between generations.
 - `timeoutMs`: optional session time limit (default 30 seconds).
 - `signal`: optional AbortSignal for cancellation.
 - `onReport`: optional callback for progress metrics.
@@ -150,3 +151,14 @@ A missing finish call, thrown error, invalid fitness, timeout, or cancellation r
 ## Trust boundary
 
 The Worker is a responsiveness and lifecycle boundary, not a complete security sandbox. Worker code can still use browser APIs such as network requests. Do not execute untrusted third-party environment code without a stronger isolation design and an explicit permission model.
+
+
+## Random-seed parameters
+
+A parameter with `type: "randomSeed"` is an integer base seed for environment randomness. During a standalone Playground run, the configured value is used unchanged. During Neuroevolution, the engine derives a deterministic seed for each generation:
+
+```ts
+generationSeed = (baseSeed + Math.imul(generation, 0x9e3779b9)) >>> 0;
+```
+
+All candidates in one generation receive the same `generationSeed` as both `ctx.session.seed` and `ctx.config.randomSeed`. Different generations receive different seeds. Re-running a training run with the same base seed reproduces the same sequence of generation seeds.
