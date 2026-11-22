@@ -24,15 +24,18 @@ interface MLContextLike {
 interface NavigatorWithML extends Navigator { ml?: { createContext(options?: MLContextOptions): Promise<MLContextLike> } }
 export interface WebNNPredictor { predict(input: readonly number[]): Promise<number[]>; dispose(): void; accelerated: boolean }
 
-export async function createWebNNPredictor(network: MLPNetwork): Promise<WebNNPredictor> {
+export async function createWebNNPredictor(
+ network: MLPNetwork,
+ options: MLContextOptions = { powerPreference: "default", accelerated: true },
+): Promise<WebNNPredictor> {
  assertValidNetwork(network);
  const ml = (navigator as NavigatorWithML).ml;
  const Builder = (globalThis as unknown as { MLGraphBuilder?: MLGraphBuilderConstructor }).MLGraphBuilder;
  if (!ml || typeof ml.createContext !== "function") throw new Error("WebNN is not exposed in this Worker. Enable WebNN in a supported browser and use HTTPS.");
  if (!Builder) throw new Error("MLGraphBuilder is unavailable in this Worker.");
- // Ask the user agent to favor efficient accelerated inference. WebNN does not
- // expose or guarantee the concrete device (CPU, GPU, or NPU).
- const context = await ml.createContext({ powerPreference: "low-power", accelerated: true });
+ // WebNN accepts preferences, not a guaranteed physical device selection.
+ // The browser and operating system retain control over the actual compute device.
+ const context = await ml.createContext(options);
  let graph: MLGraph | undefined;
  let inputTensor: MLTensor | undefined;
  let outputTensor: MLTensor | undefined;

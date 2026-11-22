@@ -113,7 +113,7 @@ Unknown view types are shown as formatted JSON. Templates are ordinary Playgroun
 | `ctx.report(metrics)` | Send progress metrics to the host UI. |
 | `ctx.render(view)` | Publish an environment-defined visualization snapshot to the host UI. The view can be any structured-clone-compatible data; a renderer can interpret its shape. |
 | `ctx.random()` | Deterministic pseudo-random number based on the session seed. |
-| `ctx.step()` | Advance one simulation step, apply the configured playback delay, and return `false` when the optional runtime safety step budget is reached. Environment-specific limits (such as Snake’s `maxStepWithoutApple`) belong in Playground parameters and are enforced by the environment code. |
+| `ctx.step()` | Advance one simulation step, apply the configured playback delay, and return `false` when an optional `maxSteps` safety budget is reached. No step budget is imposed by default. Environment-specific limits (such as Snake’s `maxStepWithoutApple`) belong in Playground parameters and are enforced by the environment code. |
 | `ctx.yield()` | Yield to the Worker event loop without consuming a simulation step. |
 | `ctx.signal` | AbortSignal for cooperative cancellation. |
 | `ctx.session` | Read-only session metadata: ID, generation, candidate index, and seed. |
@@ -129,12 +129,24 @@ Options:
 - `session`: session ID, generation, candidate index, and seed.
 - `config`: optional Playground parameters, plus runtime settings such as `stepDelayMs` and an optional safety step budget.
 - `session.seed`: deterministic environment seed. Neuroevolution resolves a `randomSeed` parameter once per generation and supplies the same seed to every candidate in that generation; the seed changes deterministically between generations.
-- `timeoutMs`: optional session time limit (default 30 seconds).
+- `timeoutMs`: optional wall-clock session time limit. No timeout is applied when omitted.
 - `signal`: optional AbortSignal for cancellation.
 - `onReport`: optional callback for progress metrics.
 - `onRender`: optional callback for visualization snapshots.
 
 The environment and candidate network both execute inside the dedicated Worker. The Worker compiles the candidate model and exposes only the `ctx.network.predict(input)` function to the environment module; the main UI thread receives progress reports, visualization snapshots, and the final result. This keeps repeated inference off the UI thread.
+
+## Inference backend selection
+
+Playground sessions and Neuroevolution can request one of these inference policies:
+
+- `auto`: let the browser choose a suitable WebNN execution path.
+- `low-power`: request WebNN with a low-power preference; this may favor an NPU, but does not guarantee one.
+- `high-performance`: request WebNN with a high-performance preference; this may favor a GPU, but does not guarantee one.
+- `webnn-cpu`: request WebNN CPU inference.
+- `javascript`: bypass WebNN and use the JavaScript CPU implementation.
+
+WebNN may fall back to JavaScript CPU if context creation or inference fails. The browser does not expose the exact physical device selected for an accelerated context, so the runtime reports whether WebNN says the context is accelerated, not whether it is specifically an NPU or GPU.
 
 ## Lifecycle and failure behavior
 
@@ -146,7 +158,7 @@ The environment and candidate network both execute inside the dedicated Worker. 
 6. The runtime calls optional `sessionEnd(ctx, result)`.
 7. The host resolves the session promise and terminates the Worker.
 
-A missing finish call, thrown error, invalid fitness, timeout, or cancellation rejects the host promise. Environments should use `await ctx.step()` in their simulation loop to enforce a finite step budget. Fitness is entirely environment-defined; simulation steps do not automatically contribute to fitness. Worker termination prevents a stuck simulation from blocking the main UI thread.
+A missing finish call, thrown error, invalid fitness, an explicitly configured timeout, or cancellation rejects the host promise. Sessions have no default wall-clock timeout or step budget; use `timeoutMs` and/or `config.maxSteps` when a limit is desired. Environments should use `await ctx.step()` in their simulation loop to enforce a finite step budget. Fitness is entirely environment-defined; simulation steps do not automatically contribute to fitness. Worker termination prevents a stuck simulation from blocking the main UI thread.
 
 ## Trust boundary
 

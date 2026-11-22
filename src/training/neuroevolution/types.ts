@@ -9,7 +9,8 @@ export interface NeuroevolutionConfig {
   crossoverRate: number;
   mutationRate: number;
   mutationScale: number;
-  evaluationTimeoutMs: number;
+  /** Optional wall-clock limit for each candidate evaluation. Omit for no timeout. */
+  evaluationTimeoutMs?: number;
   /** Controls selection, crossover, and mutation randomness. */
   seed: number;
   /** Shared by every candidate so they are evaluated under identical random conditions. */

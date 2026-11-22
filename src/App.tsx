@@ -7,7 +7,7 @@ import type { CandidateEvaluation, GenerationSummary, NeuroevolutionConfig } fro
 import { PLAYGROUND_TEMPLATES } from "./playground/templates";
 import { deleteSavedNetwork, listSavedNetworks, listSavedPlaygrounds, saveNetwork, savePlayground, saveTrainingRun, type SavedNetworkRecord, type SavedPlaygroundRecord } from "./storage";
 import ResourceLibrary from "./ResourceLibrary";
-import type { PlaygroundDefinition, PlaygroundParameterDefinition } from "./playground/api";
+import type { InferenceBackend, PlaygroundDefinition, PlaygroundParameterDefinition } from "./playground/api";
 import NetworkBuilderDialog from "./NetworkBuilderDialog";
 import PlaygroundParameterEditor from "./PlaygroundParameterEditor";
 import {
@@ -138,6 +138,16 @@ export default function App() {
       </main>
     </div>
   );
+}
+
+function getInferenceBackendLabel(backend: InferenceBackend): string {
+  switch (backend) {
+    case "auto": return "Automatic WebNN device selection";
+    case "low-power": return "WebNN low-power preference (NPU is not guaranteed)";
+    case "high-performance": return "WebNN high-performance preference (GPU is not guaranteed)";
+    case "webnn-cpu": return "WebNN CPU preference";
+    case "javascript": return "JavaScript CPU inference";
+  }
 }
 
 function getSubtitle(workspace: Workspace) {
@@ -437,7 +447,7 @@ function TrainingStudio({
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [playbackDelay, setPlaybackDelay] = useState(80);
-  const [inferenceBackend, setInferenceBackend] = useState<"auto" | "javascript">("auto");
+  const [inferenceBackend, setInferenceBackend] = useState<InferenceBackend>("auto");
   const [backendStatus, setBackendStatus] = useState("Backend will be selected when training starts.");
   const [bestReplay, setBestReplay] = useState<{ generation: number; index: number; frames: unknown[] } | null>(null);
   const [bestReplayFrameIndex, setBestReplayFrameIndex] = useState(0);
@@ -503,7 +513,7 @@ function TrainingStudio({
   }, [isReplaying, selectedAgent, replayFrameIndex, playbackDelay, populationReplays]);
   const abortRef = useRef<AbortController | null>(null);
 
-  type NumericConfigKey = "populationSize" | "generations" | "eliteCount" | "environmentSeed" | "tournamentSize" | "crossoverRate" | "mutationRate" | "mutationScale" | "evaluationTimeoutMs" | "seed" | "maxConcurrentEvaluations";
+  type NumericConfigKey = "populationSize" | "generations" | "eliteCount" | "environmentSeed" | "tournamentSize" | "crossoverRate" | "mutationRate" | "mutationScale" | "seed" | "maxConcurrentEvaluations";
   const updateNumber = (key: NumericConfigKey, value: number) => {
     if (!Number.isFinite(value)) return;
     setConfig((current) => {
@@ -534,7 +544,7 @@ function TrainingStudio({
     setBestReplay(null);
     setBestReplayFrameIndex(0);
     setBestReplayPlaying(false);
-    setBackendStatus(inferenceBackend === "auto" ? "Requesting WebNN acceleration with a low-power preference…" : "JavaScript CPU inference selected.");
+    setBackendStatus(getInferenceBackendLabel(inferenceBackend) + " requested; waiting for runtime detection…");
     setSelectedAgent(null);
     setIsReplaying(false);
     setActiveGeneration(0);
@@ -547,7 +557,7 @@ function TrainingStudio({
         environmentSource: selectedPlayground.source,
         config,
         inferenceBackend,
-        configForEnvironment: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, maxSteps: 100000, ...environmentParameters },
+        configForEnvironment: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, ...environmentParameters },
         signal: controller.signal,
         onBackend: (status) => setBackendStatus(status.detail),
         onCandidate: (candidate) => {
@@ -627,7 +637,7 @@ function TrainingStudio({
         <div className="training-config-body">
           <p className="training-description">Evaluate candidate networks inside your JavaScript Playground. Fitness is calculated by the environment; the evolution engine handles selection, crossover, mutation, and generations.</p>
           <div className="training-config-grid">
-            <label>Inference backend<select value={inferenceBackend} onChange={(event) => setInferenceBackend(event.target.value as "auto" | "javascript")} disabled={status === "running"}><option value="auto">WebNN accelerated · low-power preference</option><option value="javascript">JavaScript · CPU</option></select></label>
+            <label>Inference backend<select value={inferenceBackend} onChange={(event) => setInferenceBackend(event.target.value as InferenceBackend)} disabled={status === "running"}><option value="auto">Auto · browser chooses</option><option value="low-power">Low power · NPU preference</option><option value="high-performance">High performance · GPU preference</option><option value="webnn-cpu">WebNN · CPU preference</option><option value="javascript">JavaScript · CPU</option></select></label>
             <label>Playground<select value={selectedPlaygroundId} onChange={(event) => { setSelectedPlaygroundId(event.target.value); setNetwork(null); setSelectedNetworkId(""); }}><option value="">Select a saved Playground…</option>{savedPlaygrounds.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.definition.inputSize}→{p.definition.outputSize}</option>)}</select></label>
             <label>Compatible Network<select value={selectedNetworkId} onChange={(event) => { setSelectedNetworkId(event.target.value); const item = compatibleNetworks.find((x) => x.id === event.target.value); if (item) setNetwork(item.network); }}><option value="">Select a compatible Network…</option>{compatibleNetworks.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
             {selectedPlayground?.definition.parameters.map((parameter) => <label key={parameter.key}>{parameter.label}
@@ -637,6 +647,7 @@ function TrainingStudio({
             <label>Population size<input type="number" min="2" max="500" value={config.populationSize} onChange={(event) => updateNumber("populationSize", event.target.valueAsNumber)} /></label>
             <label>Concurrent evaluations<input type="number" min="1" max={config.populationSize} value={config.maxConcurrentEvaluations} onChange={(event) => updateNumber("maxConcurrentEvaluations", Math.min(config.populationSize, Math.max(1, Math.floor(event.target.valueAsNumber))))} /></label>
             <label>Generations<input type="number" min="1" max="1000" value={config.generations} onChange={(event) => updateNumber("generations", event.target.valueAsNumber)} /></label>
+            <label>Evaluation timeout (seconds, 0 = unlimited)<input type="number" min="0" step="1" value={config.evaluationTimeoutMs === undefined ? 0 : config.evaluationTimeoutMs / 1000} onChange={(event) => { const seconds = event.target.valueAsNumber; if (Number.isFinite(seconds) && seconds >= 0) setConfig((current) => ({ ...current, evaluationTimeoutMs: seconds === 0 ? undefined : seconds * 1000 })); }} /></label>
             <label>Elite count<input type="number" min="1" max={Math.max(1, config.populationSize - 1)} value={config.eliteCount} onChange={(event) => updateNumber("eliteCount", event.target.valueAsNumber)} /></label>
             <label>Tournament size<input type="number" min="1" max="100" value={config.tournamentSize} onChange={(event) => updateNumber("tournamentSize", event.target.valueAsNumber)} /></label>
             <label>Mutation rate<input type="number" min="0" max="1" step="0.01" value={config.mutationRate} onChange={(event) => updateNumber("mutationRate", event.target.valueAsNumber)} /></label>
@@ -792,6 +803,8 @@ function PlaygroundOverview({
   const [result, setResult] = useState<{ fitness: number; metrics?: Record<string, unknown> } | null>(null);
   const [logs, setLogs] = useState<Record<string, unknown>[]>([]);
   const [playbackDelay, setPlaybackDelay] = useState(80);
+  const [inferenceBackend, setInferenceBackend] = useState<InferenceBackend>("auto");
+  const [backendStatus, setBackendStatus] = useState("Backend will be selected when the session starts.");
   const [savedNetworks, setSavedNetworks] = useState<SavedNetworkRecord[]>([]);
   const [selectedNetworkId, setSelectedNetworkId] = useState("");
   const [showNetworkBuilder, setShowNetworkBuilder] = useState(false);
@@ -898,9 +911,10 @@ function PlaygroundOverview({
           candidateIndex: 0,
           seed: Number(playgroundParameters.find((parameter) => parameter.type === "randomSeed")?.default ?? 42),
         },
-        config: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, maxSteps: 100000, ...Object.fromEntries(playgroundParameters.map((parameter) => [parameter.key, parameter.default])) },
-        timeoutMs: 30_000,
+        config: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, ...Object.fromEntries(playgroundParameters.map((parameter) => [parameter.key, parameter.default])) },
+        inferenceBackend,
         signal: controller.signal,
+        onBackend: (backend) => setBackendStatus(backend.detail),
         onReport: (metrics) => setLogs((current) => [...current, metrics]),
         onRender: setRenderedView,
       });
@@ -943,7 +957,8 @@ function PlaygroundOverview({
           {savePlaygroundMessage && <span className="save-message">{savePlaygroundMessage}</span>}
           {savePlaygroundError && <span className="environment-error">{savePlaygroundError}</span>}
         </div>
-        <div className="playground-network-controls"><label>Select Network<select value={selectedNetworkId} onChange={(event) => setSelectedNetworkId(event.target.value)}><option value="">Select a compatible Network…</option>{compatibleNetworks.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><button className="secondary-button" onClick={() => setShowNetworkBuilder(true)}><Plus size={14} /> Create</button><button className="primary-button" onClick={runEnvironment} disabled={!selectedNetwork || status === "running"}><Play size={14} /> Run Environment</button></div>
+        <div className="playground-network-controls"><label>Select Network<select value={selectedNetworkId} onChange={(event) => setSelectedNetworkId(event.target.value)}><option value="">Select a compatible Network…</option>{compatibleNetworks.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Inference backend<select value={inferenceBackend} onChange={(event) => setInferenceBackend(event.target.value as InferenceBackend)} disabled={status === "running"}><option value="auto">Auto · browser chooses</option><option value="low-power">Low power · NPU preference</option><option value="high-performance">High performance · GPU preference</option><option value="webnn-cpu">WebNN · CPU preference</option><option value="javascript">JavaScript · CPU</option></select></label><button className="secondary-button" onClick={() => setShowNetworkBuilder(true)}><Plus size={14} /> Create</button><button className="primary-button" onClick={runEnvironment} disabled={!selectedNetwork || status === "running"}><Play size={14} /> Run Environment</button></div>
+        <p className="training-description">{backendStatus}</p>
         <div className="playground-step-heading">3. Write environment code</div>
         <div className="environment-editor-meta">
           <span>Exports <code>sessionStart(ctx)</code> and optional <code>sessionEnd(ctx, result)</code></span>

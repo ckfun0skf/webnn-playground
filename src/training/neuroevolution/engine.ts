@@ -22,7 +22,6 @@ export const DEFAULT_NEUROEVOLUTION_CONFIG = {
   crossoverRate: 0.7,
   mutationRate: 0.08,
   mutationScale: 0.15,
-  evaluationTimeoutMs: 30_000,
   seed: 42,
   environmentSeed: 42,
   includeInitialNetwork: true,
@@ -61,8 +60,9 @@ function validateOptions(options: RunNeuroevolutionOptions): void {
   if (!Number.isInteger(config.environmentSeed)) {
     throw new Error("environmentSeed must be an integer.");
   }
-  if (!Number.isFinite(config.evaluationTimeoutMs) || config.evaluationTimeoutMs <= 0) {
-    throw new Error("evaluationTimeoutMs must be a positive number.");
+  if (config.evaluationTimeoutMs !== undefined &&
+      (!Number.isFinite(config.evaluationTimeoutMs) || config.evaluationTimeoutMs <= 0)) {
+    throw new Error("evaluationTimeoutMs must be a positive number when configured.");
   }
   if (!Number.isInteger(config.maxConcurrentEvaluations) || config.maxConcurrentEvaluations < 1) {
     throw new Error("maxConcurrentEvaluations must be a positive integer.");
