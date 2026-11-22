@@ -500,7 +500,7 @@ function TrainingStudio({
       if (!active) return;
       setSavedPlaygrounds(playgrounds);
       setSavedCompatibleNetworks(networks);
-      setSelectedPlaygroundId((current) => current || playgrounds[0]?.id || "");
+      setSelectedPlaygroundId((current) => playgrounds.some((item) => item.id === current) ? current : playgrounds[0]?.id || "");
     }).catch((loadError) => setError(loadError instanceof Error ? loadError.message : String(loadError)));
     return () => { active = false; };
   }, [resourceRevision]);
