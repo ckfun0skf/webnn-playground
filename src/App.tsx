@@ -819,7 +819,6 @@ function PlaygroundOverview({
       if (!playgroundName.trim()) throw new Error("Enter a Playground name.");
       if (!/^[a-z0-9][a-z0-9._-]*$/i.test(playgroundId.trim())) throw new Error("Playground ID may contain letters, numbers, dots, underscores, and hyphens.");
       if (!Number.isInteger(playgroundInputSize) || playgroundInputSize < 1 || !Number.isInteger(playgroundOutputSize) || playgroundOutputSize < 1) throw new Error("Input/output dimensions must be positive integers.");
-      const stringValue = (key: string, fallback: string) => source.match(new RegExp(key + "\\s*:\\s*[\"']([^\"']+)[\"']"))?.[1] ?? fallback;
       const numberValue = (key: string, fallback: number) => Number(source.match(new RegExp(key + "\\s*:\\s*(\\d+)"))?.[1] ?? fallback);
       const parameters = JSON.parse(playgroundParametersJson) as PlaygroundDefinition["parameters"];
       if (!Array.isArray(parameters) || parameters.some((item) => !item || typeof item.key !== "string" || typeof item.label !== "string" || !["number", "boolean", "string"].includes(item.type) || !["number", "boolean", "string"].includes(typeof item.default))) throw new Error("Parameters must be a JSON array of typed parameter definitions.");
