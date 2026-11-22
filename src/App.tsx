@@ -423,7 +423,6 @@ function TrainingStudio({
   network,
   setNetwork,
   onSaveNetwork,
-  environmentSource,
   setWorkspace,
 }: {
   network: MLPNetwork | null;
