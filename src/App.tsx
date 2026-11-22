@@ -381,7 +381,7 @@ function CanvasView({ view }: { view: CanvasVisualization }) {
       context.restore();
     }
   }, [view]);
-  const labels = (items: CanvasVisualization["header"]) => items?.map((item, index) => typeof item === "string" ? item : item.value === undefined ? item.label : item.label + ": " + item.value).map((item, index) => <span key={index}>{item}</span>);
+  const labels = (items: CanvasVisualization["header"]) => items?.map((item) => typeof item === "string" ? item : item.value === undefined ? item.label : item.label + ": " + item.value).map((item, index) => <span key={index}>{item}</span>);
   return <div className="generic-playground-view">
     {view.header?.length ? <div className="playground-view-labels header">{labels(view.header)}</div> : null}
     <canvas ref={canvasRef} className="playground-canvas" aria-label="Playground canvas" />
