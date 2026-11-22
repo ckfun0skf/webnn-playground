@@ -477,12 +477,17 @@ function TrainingStudio({
 
   useEffect(() => {
     if (!bestReplayPlaying || !bestReplay || bestReplay.frames.length < 2) return;
-    const timer = window.setInterval(() => setBestReplayFrameIndex((index) => {
-      if (index >= bestReplay.frames.length - 1) { setBestReplayPlaying(false); return index; }
-      return index + 1;
-    }), Math.max(30, playbackDelay || 30));
+    const timer = window.setInterval(() => {
+      setBestReplayFrameIndex((index) => Math.min(index + 1, bestReplay.frames.length - 1));
+    }, Math.max(30, playbackDelay || 30));
     return () => window.clearInterval(timer);
   }, [bestReplayPlaying, bestReplay, playbackDelay]);
+
+  useEffect(() => {
+    if (bestReplayPlaying && bestReplay && bestReplayFrameIndex >= bestReplay.frames.length - 1) {
+      setBestReplayPlaying(false);
+    }
+  }, [bestReplayPlaying, bestReplay, bestReplayFrameIndex]);
 
   useEffect(() => {
     if (!isReplaying || !selectedAgent) return;
