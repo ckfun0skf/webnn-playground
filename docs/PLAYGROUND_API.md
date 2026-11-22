@@ -47,6 +47,37 @@ export async function sessionEnd(ctx, result) {
 
 A session must call `ctx.finish({ fitness, metrics? })` exactly once. The fitness value must be a finite number. The environment should return from `sessionStart` after finishing; the runtime waits for the finish acknowledgement and then calls `sessionEnd`.
 
+## Visualization contract
+
+Environment JavaScript does not create DOM elements or React components. It publishes serializable state with `ctx.render(view)`; the host application owns rendering and interaction. This keeps environment code isolated in a Worker and prevents arbitrary JSX/DOM code from running inside the simulation.
+
+The host currently supports these generic view shapes:
+
+```js
+// A grid: x/y are zero-based cell coordinates. Use the listed states.
+ctx.render({
+  type: "grid",
+  title: "Warehouse",
+  width: 8,
+  height: 6,
+  cells: [
+    { x: 1, y: 2, state: "active", label: "A" },
+    { x: 5, y: 3, state: "target", label: "T" },
+    { x: 3, y: 1, state: "wall" }
+  ],
+  metrics: [{ label: "Delivered", value: 4 }]
+});
+
+// A metrics-only panel.
+ctx.render({
+  type: "metrics",
+  title: "Simulation status",
+  metrics: [{ label: "Score", value: 12 }, { label: "Time", value: 34, unit: "s" }]
+});
+```
+
+Grid cell states: `active`, `target`, `wall`, `success`, `danger`, and `muted`. Cells without a state use the default empty style. Unknown view types are displayed as formatted JSON. The Snake sample currently uses a dedicated `type: "snake"` renderer in the host; its board is not drawn by the Snake JavaScript module itself.
+
 ## Context
 
 | Member | Description |
