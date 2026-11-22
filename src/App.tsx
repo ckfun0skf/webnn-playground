@@ -574,20 +574,24 @@ function TrainingStudio({
           setBest((current) => !current || candidate.fitness > current.fitness ? candidate : current);
           if (!candidate.error && (bestFitnessRef.current === null || candidate.fitness > bestFitnessRef.current)) {
             bestFitnessRef.current = candidate.fitness;
-            const replayKey = candidate.generation + "-" + candidate.candidateIndex;
-            setBestReplay({ generation: candidate.generation, index: candidate.candidateIndex, frames: currentReplaysRef.current[replayKey] ?? [] });
-            setBestReplayFrameIndex(0);
-            setBestReplayPlaying(false);
+            if (renderPopulation) {
+              const replayKey = candidate.generation + "-" + candidate.candidateIndex;
+              setBestReplay({ generation: candidate.generation, index: candidate.candidateIndex, frames: currentReplaysRef.current[replayKey] ?? [] });
+              setBestReplayFrameIndex(0);
+              setBestReplayPlaying(false);
+            }
           }
-          setPopulationViews((current) => ({
-            ...current,
-            [candidate.candidateIndex]: {
-              ...(current[candidate.candidateIndex] ?? { view: null }),
-              fitness: candidate.fitness,
-              finished: true,
-              error: candidate.error,
-            },
-          }));
+          if (renderPopulation) {
+            setPopulationViews((current) => ({
+              ...current,
+              [candidate.candidateIndex]: {
+                ...(current[candidate.candidateIndex] ?? { view: null }),
+                fitness: candidate.fitness,
+                finished: true,
+                error: candidate.error,
+              },
+            }));
+          }
         },
         ...(renderPopulation ? {
           onPopulationRender: (generation: number, candidateIndex: number, view: unknown) => {
@@ -611,6 +615,38 @@ function TrainingStudio({
         },
       });
       setBest(result.best);
+      if (!renderPopulation && !result.best.error) {
+        setBackendStatus("Training complete; capturing a replay of the best candidate…");
+        const baseEnvironmentSeed = Number(environmentParameters.randomSeed ?? config.environmentSeed);
+        const replaySeed = (baseEnvironmentSeed + Math.imul(result.best.generation, 0x9e3779b9)) >>> 0;
+        const replayFrames: unknown[] = [];
+        await runPlaygroundSession({
+          source: selectedPlayground.source,
+          network: result.best.network,
+          session: {
+            sessionId: result.best.id + "-best-replay",
+            generation: result.best.generation,
+            candidateIndex: result.best.candidateIndex,
+            seed: replaySeed,
+          },
+          config: {
+            inputSize: activeNetwork.inputSize,
+            outputSize,
+            stepDelayMs: playbackDelay,
+            renderIntervalMs: 33,
+            ...environmentParameters,
+            randomSeed: replaySeed,
+          },
+          inferenceBackend,
+          signal: controller.signal,
+          onRender: (view) => {
+            if (replayFrames.length < 1200) replayFrames.push(view);
+          },
+        });
+        setBestReplay({ generation: result.best.generation, index: result.best.candidateIndex, frames: replayFrames });
+        setBestReplayFrameIndex(0);
+        setBestReplayPlaying(false);
+      }
       const bestNetwork = { ...structuredClone(result.best.network), id: crypto.randomUUID(), name: selectedPlayground.name + " best · " + new Date().toLocaleDateString() };
       await onSaveNetwork(bestNetwork);
       await saveTrainingRun({
