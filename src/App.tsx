@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { appendDenseLayer, createMLP, removeLastDenseLayer, resizeLayerUnits, updateLayerParameters, type MLPNetwork } from "./core/model";
+import { appendDenseLayer, removeLastDenseLayer, resizeLayerUnits, updateLayerParameters, type MLPNetwork } from "./core/model";
 import { compileMLP } from "./core/engine";
 import { runPlaygroundSession } from "./playground/runtime";
 import { DEFAULT_NEUROEVOLUTION_CONFIG, runNeuroevolution } from "./training/neuroevolution";
@@ -7,7 +7,9 @@ import type { CandidateEvaluation, GenerationSummary, NeuroevolutionConfig } fro
 import { PLAYGROUND_TEMPLATES } from "./playground/templates";
 import { deleteSavedNetwork, listSavedNetworks, listSavedPlaygrounds, saveNetwork, savePlayground, saveTrainingRun, type SavedNetworkRecord, type SavedPlaygroundRecord } from "./storage";
 import ResourceLibrary from "./ResourceLibrary";
-import type { PlaygroundDefinition } from "./playground/api";
+import type { PlaygroundDefinition, PlaygroundParameterDefinition } from "./playground/api";
+import NetworkBuilderDialog from "./NetworkBuilderDialog";
+import PlaygroundParameterEditor from "./PlaygroundParameterEditor";
 import {
   Activity,
   Save,
@@ -128,7 +130,7 @@ export default function App() {
         </div>
         {workspace === "network" && <NetworkOverview network={network} setNetwork={setNetwork} onSaveNetwork={saveToLibrary} inputText={inputText} setInputText={setInputText} prediction={prediction} setPrediction={setPrediction} inferenceError={inferenceError} setInferenceError={setInferenceError} />}
         {workspace === "training" && <TrainingStudio network={network} setNetwork={setNetwork} onSaveNetwork={saveToLibrary} resourceRevision={resourceRevision} setWorkspace={setWorkspace} />}
-        {workspace === "playground" && <PlaygroundOverview network={network} setNetwork={setNetwork} source={environmentSource} setSource={setEnvironmentSource} onPlaygroundSaved={() => setResourceRevision((v) => v + 1)} resourceRevision={resourceRevision} />}
+        {workspace === "playground" && <PlaygroundOverview source={environmentSource} setSource={setEnvironmentSource} onSaveNetwork={saveToLibrary} onPlaygroundSaved={() => setResourceRevision((v) => v + 1)} resourceRevision={resourceRevision} />}
         {workspace === "library" && <NetworkLibrary revision={libraryRevision} onLoad={(model) => { setNetwork(model); setWorkspace("network"); }} />}
         {workspace === "resources" && <ResourceLibrary source={environmentSource} onLoadPlayground={(source) => { setEnvironmentSource(source); setWorkspace("playground"); }} onLoadNetwork={(model) => { setNetwork(model); setWorkspace("network"); }} revision={resourceRevision} onChanged={() => setResourceRevision((v) => v + 1)} />}
       </main>
@@ -168,17 +170,10 @@ function NetworkOverview({
   setInferenceError: (value: string | null) => void;
 }) {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const createNetwork = () => {
-    const next = createMLP({
-      name: "My first MLP",
-      inputSize: 3,
-      layers: [{ units: 4, activation: "relu" }, { units: 2, activation: "softmax" }],
-    });
-    setNetwork(next);
-    setInputText("0, 0, 0");
-    setPrediction(null);
-    setInferenceError(null);
-  };
+  const [showNetworkBuilder, setShowNetworkBuilder] = useState(false);
+  const [existingNetworkNames, setExistingNetworkNames] = useState<string[]>([]);
+  useEffect(() => { listSavedNetworks().then((items) => setExistingNetworkNames(items.map((item) => item.name))).catch(() => undefined); }, []);
+  const createNetwork = () => setShowNetworkBuilder(true);
 
   const runInference = () => {
     if (!network) return;
@@ -196,7 +191,7 @@ function NetworkOverview({
     <div className="content-grid">
       <section className="panel network-panel">
         <div className="panel-heading">
-          <div><div className="panel-kicker">MODEL CANVAS</div><h2>{network ? network.name : "Network architecture"}</h2></div>
+          <div><div className="panel-kicker">MODEL CANVAS</div><h2>{network ? network.name : "Network architecture"}</h2></div><button className="primary-button" onClick={createNetwork}><Plus size={14} /> New network</button>
           <div className="panel-tools"><span className="model-chip">MLP</span><button className="small-icon-button" title="Model options" aria-label="Model options"><Settings2 size={15} /></button></div>
         </div>
         <div className="empty-canvas">
@@ -326,6 +321,7 @@ function NetworkOverview({
           <div className="backend-row"><span className="backend-icon webnn"><Cpu size={16} /></span><div><strong>WebNN</strong><small>Optional · browser dependent</small></div><span className={`backend-state ${"ml" in navigator ? "available" : "unavailable"}`}>{ "ml" in navigator ? "DETECTED" : "UNAVAILABLE"}</span></div>
         </section>
       </aside>
+      {showNetworkBuilder && <NetworkBuilderDialog defaultName="New Network" existingNames={existingNetworkNames} onClose={() => setShowNetworkBuilder(false)} onCreate={async (created) => { await onSaveNetwork(created); setExistingNetworkNames((current) => [...current, created.name]); setNetwork(created); setInputText(Array(created.inputSize).fill("0").join(", ")); setPrediction(null); setInferenceError(null); setShowNetworkBuilder(false); }} />}
     </div>
   );
 }
@@ -447,7 +443,6 @@ function TrainingStudio({
   const [selectedAgent, setSelectedAgent] = useState<{ generation: number; index: number } | null>(null);
   const [replayFrameIndex, setReplayFrameIndex] = useState(0);
   const [isReplaying, setIsReplaying] = useState(false);
-  const [environmentMaxSteps, setEnvironmentMaxSteps] = useState(500);
   const [activeGeneration, setActiveGeneration] = useState(0);
   const [savedPlaygrounds, setSavedPlaygrounds] = useState<SavedPlaygroundRecord[]>([]);
   const [selectedPlaygroundId, setSelectedPlaygroundId] = useState("");
@@ -460,7 +455,7 @@ function TrainingStudio({
       if (!active) return;
       setSavedPlaygrounds(playgrounds);
       setSavedCompatibleNetworks(networks);
-      setSelectedPlaygroundId((current) => playgrounds.some((item) => item.id === current) ? current : playgrounds[0]?.id || "");
+      setSelectedPlaygroundId((current) => playgrounds.some((item) => item.id === current) ? current : "");
     }).catch((loadError) => setError(loadError instanceof Error ? loadError.message : String(loadError)));
     return () => { active = false; };
   }, [resourceRevision]);
@@ -500,13 +495,10 @@ function TrainingStudio({
 
   const startTraining = async () => {
     if (!selectedPlayground) { setError("Save a Playground in Resource Library, then select it here."); return; }
-    const networkIsCompatible = network && network.inputSize === selectedPlayground.definition.inputSize && network.layers[network.layers.length - 1]?.units === selectedPlayground.definition.outputSize;
-    const activeNetwork = networkIsCompatible ? network! : createMLP({
-      name: selectedPlayground.name + " seed network",
-      inputSize: selectedPlayground.definition.inputSize,
-      layers: [{ units: Math.max(4, selectedPlayground.definition.outputSize * 2), activation: "relu" }, { units: selectedPlayground.definition.outputSize, activation: "softmax" }],
-    });
-    if (!networkIsCompatible) setNetwork(activeNetwork);
+    const selectedRecord = compatibleNetworks.find((item) => item.id === selectedNetworkId);
+    if (!selectedRecord) { setError("Select a compatible saved Network before starting training."); return; }
+    const activeNetwork = selectedRecord.network;
+    setNetwork(activeNetwork);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -527,7 +519,7 @@ function TrainingStudio({
         initialNetwork: activeNetwork,
         environmentSource: selectedPlayground.source,
         config,
-        configForEnvironment: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, maxSteps: environmentMaxSteps, ...environmentParameters },
+        configForEnvironment: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, maxSteps: 100000, ...environmentParameters },
         signal: controller.signal,
         onCandidate: (candidate) => {
           setEvents((current) => [...current, {
@@ -568,7 +560,7 @@ function TrainingStudio({
         id: "training-" + crypto.randomUUID(), name: selectedPlayground.name + " · " + new Date().toLocaleString(), status: "completed",
         playgroundId: selectedPlayground.id, playgroundName: selectedPlayground.name, playgroundVersion: selectedPlayground.version,
         playgroundSource: selectedPlayground.source, initialNetwork: structuredClone(activeNetwork), evolutionConfig: structuredClone(config) as unknown as Record<string, unknown>,
-        environmentConfig: { maxSteps: environmentMaxSteps, stepDelayMs: playbackDelay, seed: config.environmentSeed, ...environmentParameters },
+        environmentConfig: { maxSteps: 100000, stepDelayMs: playbackDelay, seed: config.environmentSeed, ...environmentParameters },
         bestNetwork, bestFitness: result.best.fitness, generationHistory: structuredClone(result.history) as unknown as Record<string, unknown>[],
         createdAt: Date.now(), completedAt: Date.now(),
       });
@@ -595,10 +587,10 @@ function TrainingStudio({
           <p className="training-description">Evaluate candidate networks inside your JavaScript Playground. Fitness is calculated by the environment; the evolution engine handles selection, crossover, mutation, and generations.</p>
           <div className="training-config-grid">
             <label>Playground<select value={selectedPlaygroundId} onChange={(event) => { setSelectedPlaygroundId(event.target.value); setNetwork(null); setSelectedNetworkId(""); }}><option value="">Select a saved Playground…</option>{savedPlaygrounds.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.definition.inputSize}→{p.definition.outputSize}</option>)}</select></label>
-            <label>Compatible Network<select value={selectedNetworkId} onChange={(event) => { setSelectedNetworkId(event.target.value); const item = compatibleNetworks.find((x) => x.id === event.target.value); if (item) setNetwork(item.network); }}><option value="">Use current / generated network</option>{compatibleNetworks.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            <label>Compatible Network<select value={selectedNetworkId} onChange={(event) => { setSelectedNetworkId(event.target.value); const item = compatibleNetworks.find((x) => x.id === event.target.value); if (item) setNetwork(item.network); }}><option value="">Select a compatible Network…</option>{compatibleNetworks.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
             {selectedPlayground?.definition.parameters.map((parameter) => <label key={parameter.key}>{parameter.label}
               {parameter.type === "boolean" ? <input type="checkbox" checked={Boolean(environmentParameters[parameter.key])} onChange={(event) => setEnvironmentParameters((current) => ({ ...current, [parameter.key]: event.target.checked }))} /> :
-                <input type={parameter.type === "number" ? "number" : "text"} min={parameter.min} max={parameter.max} step={parameter.step} value={String(environmentParameters[parameter.key] ?? parameter.default)} onChange={(event) => setEnvironmentParameters((current) => ({ ...current, [parameter.key]: parameter.type === "number" ? event.target.valueAsNumber : event.target.value }))} />}
+                <input type={parameter.type === "number" || parameter.type === "randomSeed" ? "number" : "text"} min={parameter.min} max={parameter.max} step={parameter.step} value={String(environmentParameters[parameter.key] ?? parameter.default)} onChange={(event) => setEnvironmentParameters((current) => ({ ...current, [parameter.key]: parameter.type === "number" || parameter.type === "randomSeed" ? event.target.valueAsNumber : event.target.value }))} />}
             </label>)}
             <label>Population size<input type="number" min="2" max="500" value={config.populationSize} onChange={(event) => updateNumber("populationSize", event.target.valueAsNumber)} /></label>
             <label>Generations<input type="number" min="1" max="1000" value={config.generations} onChange={(event) => updateNumber("generations", event.target.valueAsNumber)} /></label>
@@ -608,8 +600,8 @@ function TrainingStudio({
             <label>Mutation scale<input type="number" min="0" step="0.01" value={config.mutationScale} onChange={(event) => updateNumber("mutationScale", event.target.valueAsNumber)} /></label>
             <label>Crossover rate<input type="number" min="0" max="1" step="0.01" value={config.crossoverRate} onChange={(event) => updateNumber("crossoverRate", event.target.valueAsNumber)} /></label>
             <label>Evolution seed<input type="number" step="1" value={config.seed} onChange={(event) => updateNumber("seed", event.target.valueAsNumber)} /></label>
-            <label>Environment seed<input type="number" step="1" value={config.environmentSeed} onChange={(event) => updateNumber("environmentSeed", event.target.valueAsNumber)} /></label>
-            <label>Max steps per agent<input type="number" min="1" max="10000" step="1" value={environmentMaxSteps} onChange={(event) => setEnvironmentMaxSteps(Math.max(1, event.target.valueAsNumber || 1))} /></label>
+            
+            
           </div>
           <div className="training-environment-link">
             <div><span className="panel-kicker">SELECTED PLAYGROUND</span><strong>{selectedPlayground ? selectedPlayground.name + " · " + selectedPlayground.definition.inputSize + " inputs / " + selectedPlayground.definition.outputSize + " outputs" : "Save a Playground in Resource Library first"}</strong></div>
@@ -624,7 +616,7 @@ function TrainingStudio({
             {status === "running" ? (
               <button className="secondary-button" onClick={cancelTraining}>Cancel training</button>
             ) : (
-              <button className="primary-button" onClick={startTraining} disabled={!selectedPlayground}><Play size={14} /> Start evolution</button>
+              <button className="primary-button" onClick={startTraining} disabled={!selectedPlayground || !compatibleNetworks.some((item) => item.id === selectedNetworkId)}><Play size={14} /> Start evolution</button>
             )}
             <span className="training-status"><span className={`status-dot ${status === "running" || status === "completed" ? "good" : status === "failed" ? "warn" : "neutral"}`} />{status}</span>
           </div>
@@ -732,17 +724,15 @@ function TrainingStudio({
 }
 
 function PlaygroundOverview({
-  network,
-  setNetwork,
   source,
   setSource,
+  onSaveNetwork,
   onPlaygroundSaved,
   resourceRevision,
 }: {
-  network: MLPNetwork | null;
-  setNetwork: (network: MLPNetwork | null) => void;
   source: string;
   setSource: (source: string) => void;
+  onSaveNetwork: (network: MLPNetwork) => Promise<void>;
   onPlaygroundSaved: () => void;
   resourceRevision: number;
 }) {
@@ -750,23 +740,27 @@ function PlaygroundOverview({
   const [result, setResult] = useState<{ fitness: number; metrics?: Record<string, unknown> } | null>(null);
   const [logs, setLogs] = useState<Record<string, unknown>[]>([]);
   const [playbackDelay, setPlaybackDelay] = useState(80);
-  const [environmentMaxSteps, setEnvironmentMaxSteps] = useState(500);
-  const [environmentSeed, setEnvironmentSeed] = useState(42);
+  const [savedNetworks, setSavedNetworks] = useState<SavedNetworkRecord[]>([]);
+  const [selectedNetworkId, setSelectedNetworkId] = useState("");
+  const [showNetworkBuilder, setShowNetworkBuilder] = useState(false);
+  const selectedNetwork = savedNetworks.find((item) => item.id === selectedNetworkId)?.network ?? null;
   const [playgroundName, setPlaygroundName] = useState("Custom Playground");
   const [playgroundId, setPlaygroundId] = useState("custom-playground");
-  const [playgroundInputSize, setPlaygroundInputSize] = useState(network?.inputSize ?? 3);
-  const [playgroundOutputSize, setPlaygroundOutputSize] = useState(network?.layers[network.layers.length - 1]?.units ?? 2);
+  const [playgroundInputSize, setPlaygroundInputSize] = useState(3);
+  const [playgroundOutputSize, setPlaygroundOutputSize] = useState(2);
+  const compatibleNetworks = savedNetworks.filter((item) => item.network.inputSize === playgroundInputSize && item.network.layers[item.network.layers.length - 1]?.units === playgroundOutputSize);
   const [savedPlaygrounds, setSavedPlaygrounds] = useState<SavedPlaygroundRecord[]>([]);
   const [loadPlaygroundId, setLoadPlaygroundId] = useState("");
   const [savePlaygroundMessage, setSavePlaygroundMessage] = useState<string | null>(null);
   const [savePlaygroundError, setSavePlaygroundError] = useState<string | null>(null);
-  const [playgroundParametersJson, setPlaygroundParametersJson] = useState("[]");
+  const [playgroundParameters, setPlaygroundParameters] = useState<PlaygroundParameterDefinition[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("blank");
   useEffect(() => {
     let active = true;
-    listSavedPlaygrounds().then((items) => {
+    Promise.all([listSavedPlaygrounds(), listSavedNetworks()]).then(([items, networks]) => {
       if (!active) return;
       setSavedPlaygrounds(items);
+      setSavedNetworks(networks);
       setLoadPlaygroundId((current) => current || items[0]?.id || "");
     }).catch((e) => setSavePlaygroundError(e instanceof Error ? e.message : String(e)));
     return () => { active = false; };
@@ -780,8 +774,7 @@ function PlaygroundOverview({
     setPlaygroundId(template.id);
     setPlaygroundInputSize(template.inputSize);
     setPlaygroundOutputSize(template.outputSize);
-    setPlaygroundParametersJson(JSON.stringify(template.parameters, null, 2));
-    if ("network" in template && template.network) setNetwork(createMLP(template.network));
+    setPlaygroundParameters(template.parameters);
     setRenderedView(null);
     setResult(null); setLogs([]); setError(null); setStatus("idle");
   };
@@ -792,8 +785,8 @@ function PlaygroundOverview({
       if (!/^[a-z0-9][a-z0-9._-]*$/i.test(playgroundId.trim())) throw new Error("Playground ID may contain letters, numbers, dots, underscores, and hyphens.");
       if (!Number.isInteger(playgroundInputSize) || playgroundInputSize < 1 || !Number.isInteger(playgroundOutputSize) || playgroundOutputSize < 1) throw new Error("Input/output dimensions must be positive integers.");
       const numberValue = (key: string, fallback: number) => Number(source.match(new RegExp(key + "\\s*:\\s*(\\d+)"))?.[1] ?? fallback);
-      const parameters = JSON.parse(playgroundParametersJson) as PlaygroundDefinition["parameters"];
-      if (!Array.isArray(parameters) || parameters.some((item) => !item || typeof item.key !== "string" || typeof item.label !== "string" || !["number", "boolean", "string"].includes(item.type) || !["number", "boolean", "string"].includes(typeof item.default))) throw new Error("Parameters must be a JSON array of typed parameter definitions.");
+      const parameters = playgroundParameters;
+      if (!Array.isArray(parameters) || parameters.some((item) => !item || typeof item.key !== "string" || typeof item.label !== "string" || !["number", "boolean", "string", "randomSeed"].includes(item.type) || !["number", "boolean", "string"].includes(typeof item.default))) throw new Error("Parameters must be a JSON array of typed parameter definitions.");
       const definition: PlaygroundDefinition = {
         id: playgroundId.trim(), name: playgroundName.trim(),
         version: numberValue("version", 1),
@@ -819,6 +812,8 @@ function PlaygroundOverview({
     setPlaygroundId(item.id);
     setPlaygroundInputSize(item.definition.inputSize);
     setPlaygroundOutputSize(item.definition.outputSize);
+    setPlaygroundParameters(item.definition.parameters);
+    setSelectedNetworkId("");
     setSavePlaygroundMessage("Loaded " + item.name + ".");
     setSavePlaygroundError(null);
     setResult(null); setLogs([]); setStatus("idle");
@@ -828,12 +823,8 @@ function PlaygroundOverview({
   const abortRef = useRef<AbortController | null>(null);
 
   const runEnvironment = async () => {
-    const activeNetwork = network ?? createMLP({
-      name: "Playground sample network",
-      inputSize: 2,
-      layers: [{ units: 2, activation: "softmax" }],
-    });
-    if (!network) setNetwork(activeNetwork);
+    if (!selectedNetwork) return;
+    const activeNetwork = selectedNetwork;
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -852,9 +843,9 @@ function PlaygroundOverview({
           sessionId: `playground-${Date.now()}`,
           generation: 0,
           candidateIndex: 0,
-          seed: environmentSeed,
+          seed: Number(playgroundParameters.find((parameter) => parameter.type === "randomSeed")?.default ?? 42),
         },
-        config: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, maxSteps: environmentMaxSteps },
+        config: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, maxSteps: 100000, ...Object.fromEntries(playgroundParameters.map((parameter) => [parameter.key, parameter.default])) },
         timeoutMs: 30_000,
         signal: controller.signal,
         onReport: (metrics) => setLogs((current) => [...current, metrics]),
@@ -888,15 +879,23 @@ function PlaygroundOverview({
         <div className="playground-resource-controls">
           <label>Playground name<input value={playgroundName} onChange={(e) => setPlaygroundName(e.target.value)} /></label>
           <label>Stable ID<input value={playgroundId} onChange={(e) => setPlaygroundId(e.target.value)} /></label>
-          <label>Input size<input type="number" min="1" value={playgroundInputSize} onChange={(e) => setPlaygroundInputSize(e.target.valueAsNumber)} /></label>
-          <label>Output size<input type="number" min="1" value={playgroundOutputSize} onChange={(e) => setPlaygroundOutputSize(e.target.valueAsNumber)} /></label>
-          <label className="playground-parameters-field">Environment parameters (JSON)<textarea rows={3} value={playgroundParametersJson} onChange={(e) => setPlaygroundParametersJson(e.target.value)} spellCheck={false} /></label>
+          <div className="playground-step-heading">1. Define Neural Network input / output</div>
+          <label>Input nodes<input type="number" min="1" value={playgroundInputSize} onChange={(e) => { setPlaygroundInputSize(e.target.valueAsNumber); setSelectedNetworkId(""); }} /></label>
+          <label>Output nodes<input type="number" min="1" value={playgroundOutputSize} onChange={(e) => { setPlaygroundOutputSize(e.target.valueAsNumber); setSelectedNetworkId(""); }} /></label>
+          <div className="playground-step-heading">2. Define parameters</div>
+          <div className="playground-parameters-field"><PlaygroundParameterEditor parameters={playgroundParameters} onChange={setPlaygroundParameters} /></div>
           <button className="primary-button" onClick={() => void saveCurrentPlayground()}><Save size={14} /> Save Playground</button>
           <label>Saved Playground<select value={loadPlaygroundId} onChange={(e) => setLoadPlaygroundId(e.target.value)}><option value="">Select saved Playground…</option>{savedPlaygrounds.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.definition.inputSize}→{item.definition.outputSize}</option>)}</select></label>
           <button className="secondary-button" onClick={loadSavedPlayground} disabled={!savedPlaygrounds.some((item) => item.id === loadPlaygroundId)}>Load selected</button>
           {savePlaygroundMessage && <span className="save-message">{savePlaygroundMessage}</span>}
           {savePlaygroundError && <span className="environment-error">{savePlaygroundError}</span>}
         </div>
+        <div className="playground-network-controls"><label>Select Network<select value={selectedNetworkId} onChange={(event) => setSelectedNetworkId(event.target.value)}><option value="">Select a compatible Network…</option>{compatibleNetworks.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><button className="secondary-button" onClick={() => setShowNetworkBuilder(true)}><Plus size={14} /> Create</button><button className="primary-button" onClick={runEnvironment} disabled={!selectedNetwork || status === "running"}><Play size={14} /> Run Environment</button></div>
+        <div className="playground-step-heading">3. Write environment code</div>
+        <div className="playground-network-controls"><label>Select Network<select value={selectedNetworkId} onChange={(event) => setSelectedNetworkId(event.target.value)}><option value="">Select a compatible Network…</option>{compatibleNetworks.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><button className="secondary-button" onClick={() => setShowNetworkBuilder(true)}><Plus size={14} /> Create</button><button className="primary-button" onClick={runEnvironment} disabled={!selectedNetwork || status === "running"}><Play size={14} /> Run Environment</button></div>
+        <div className="playground-step-heading">3. Write environment code</div>
+        <div className="playground-network-controls"><label>Select Network<select value={selectedNetworkId} onChange={(event) => setSelectedNetworkId(event.target.value)}><option value="">Select a compatible Network…</option>{compatibleNetworks.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><button className="secondary-button" onClick={() => setShowNetworkBuilder(true)}><Plus size={14} /> Create</button><button className="primary-button" onClick={runEnvironment} disabled={!selectedNetwork || status === "running"}><Play size={14} /> Run Environment</button></div>
+        <div className="playground-step-heading">3. Write environment code</div>
         <div className="environment-editor-meta">
           <span>Exports <code>sessionStart(ctx)</code> and optional <code>sessionEnd(ctx, result)</code></span>
           <span>{source.split("\n").length} lines</span>
@@ -914,21 +913,15 @@ function PlaygroundOverview({
             <input id="playground-speed" type="range" min="0" max="500" step="10" disabled={status === "running"} value={playbackDelay} onChange={(event) => setPlaybackDelay(Number(event.target.value))} />
             <span>{playbackDelay === 0 ? "Fastest" : playbackDelay + " ms / step"}</span>
           </div>
-          <label className="environment-run-parameter">Max steps
-            <input type="number" min="1" max="10000" value={environmentMaxSteps} disabled={status === "running"} onChange={(event) => setEnvironmentMaxSteps(Math.max(1, event.target.valueAsNumber || 1))} />
-          </label>
-          <label className="environment-run-parameter">Environment seed
-            <input type="number" step="1" value={environmentSeed} disabled={status === "running"} onChange={(event) => setEnvironmentSeed(event.target.valueAsNumber || 0)} />
-          </label>
           <div className="selected-network-label">
             <BrainCircuit size={14} />
-            <span>{network ? network.name : "A sample 2 → 2 MLP will be created on first run"}</span>
+            <span>{selectedNetwork ? selectedNetwork.name : "Select or create a compatible Network to run this Playground"}</span>
           </div>
           <div className="environment-actions">
             {status === "running" ? (
               <button className="secondary-button" onClick={cancelEnvironment}>Cancel session</button>
             ) : (
-              <button className="primary-button" onClick={runEnvironment} disabled={!source.trim()}><Play size={14} /> Run environment</button>
+              <button className="primary-button" onClick={runEnvironment} disabled={!source.trim() || !selectedNetwork}><Play size={14} /> Run environment</button>
             )}
           </div>
         </div>
@@ -973,6 +966,7 @@ function PlaygroundOverview({
           <a href="https://github.com/ckfun0skf/webnn-playground/blob/main/docs/PLAYGROUND_API.md" target="_blank" rel="noreferrer">Read environment API reference ↗</a>
         </section>
       </aside>
+      {showNetworkBuilder && <NetworkBuilderDialog defaultName={playgroundName + " NN"} existingNames={savedNetworks.map((item) => item.name)} fixedInputSize={playgroundInputSize} fixedOutputSize={playgroundOutputSize} onClose={() => setShowNetworkBuilder(false)} onCreate={async (created) => { await onSaveNetwork(created); const refreshed = await listSavedNetworks(); setSavedNetworks(refreshed); const saved = refreshed.find((item) => item.id === created.id); if (saved) setSelectedNetworkId(saved.id); setShowNetworkBuilder(false); }} />}
     </div>
   );
 }
