@@ -504,7 +504,7 @@ function TrainingStudio({
       inputSize: selectedPlayground.definition.inputSize,
       layers: [{ units: Math.max(4, selectedPlayground.definition.outputSize * 2), activation: "relu" }, { units: selectedPlayground.definition.outputSize, activation: "softmax" }],
     });
-    if (!network) setNetwork(activeNetwork);
+    if (!networkIsCompatible) setNetwork(activeNetwork);
 
     const controller = new AbortController();
     abortRef.current = controller;
