@@ -57,7 +57,7 @@ export interface PlaygroundEnvironmentModule {
   ): void | Promise<void>;
 }
 
-export type InferenceBackend = "auto" | "low-power" | "high-performance" | "webnn-cpu" | "javascript";
+export type InferenceBackend = "auto" | "npu" | "low-power" | "high-performance" | "webnn-cpu" | "javascript";
 export interface InferenceBackendStatus { backend: "webnn" | "javascript"; detail: string }
 
 export interface RunPlaygroundSessionOptions {

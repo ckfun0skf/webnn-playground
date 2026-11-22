@@ -11,7 +11,7 @@ type StartMessage = {
   config: Record<string, unknown>;
   renderEnabled: boolean;
   reportEnabled: boolean;
-  inferenceBackend: "auto" | "low-power" | "high-performance" | "webnn-cpu" | "javascript";
+  inferenceBackend: "auto" | "npu" | "low-power" | "high-performance" | "webnn-cpu" | "javascript";
 };
 type IncomingMessage =
   | StartMessage
@@ -76,6 +76,7 @@ async function runSession(message: StartMessage): Promise<void> {
         const webnnPredictor = await createWebNNPredictor(message.network, {
           powerPreference,
           accelerated: message.inferenceBackend !== "webnn-cpu",
+          ...(message.inferenceBackend === "npu" ? { deviceType: "npu" as const } : {}),
         });
         disposePredictor = webnnPredictor.dispose;
         predictor = async (input) => {
@@ -94,7 +95,9 @@ async function runSession(message: StartMessage): Promise<void> {
             return cpuPredictor(input);
           }
         };
-        const preferenceLabel = message.inferenceBackend === "low-power"
+        const preferenceLabel = message.inferenceBackend === "npu"
+          ? "Chromium-specific NPU device request (fallback may still occur)"
+          : message.inferenceBackend === "low-power"
           ? "low-power preference"
           : message.inferenceBackend === "high-performance"
             ? "high-performance preference"
@@ -104,7 +107,9 @@ async function runSession(message: StartMessage): Promise<void> {
         scope.postMessage({
           type: "backend",
           backend: "webnn",
-          detail: webnnPredictor.accelerated
+          detail: message.inferenceBackend === "npu"
+            ? `Requested NPU using Chromium-specific deviceType: npu. WebNN does not expose a portable confirmation of the physical device; the browser may fall back to GPU or CPU. Check Windows Task Manager or Chromium WebNN diagnostics to verify actual NPU use.`
+            : webnnPredictor.accelerated
             ? `WebNN reports accelerated=true with ${preferenceLabel}. The browser selected an accelerated path but does not expose whether it is a GPU or NPU.`
             : `WebNN reports accelerated=false with ${preferenceLabel}; this context prefers CPU inference.`,
         });

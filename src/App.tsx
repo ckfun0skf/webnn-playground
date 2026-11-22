@@ -143,6 +143,7 @@ export default function App() {
 function getInferenceBackendLabel(backend: InferenceBackend): string {
   switch (backend) {
     case "auto": return "Automatic WebNN device selection";
+    case "npu": return "Chromium-specific NPU device request (may fall back if unavailable)";
     case "low-power": return "WebNN low-power preference (NPU is not guaranteed)";
     case "high-performance": return "WebNN high-performance preference (GPU is not guaranteed)";
     case "webnn-cpu": return "WebNN CPU preference";
@@ -457,6 +458,7 @@ function TrainingStudio({
   const [populationViews, setPopulationViews] = useState<Record<number, { view: unknown; fitness?: number; finished?: boolean; error?: string }>>({});
   const [populationReplays, setPopulationReplays] = useState<Record<string, unknown[]>>({});
   const [populationColumns, setPopulationColumns] = useState(4);
+  const [hideFinishedAgents, setHideFinishedAgents] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<{ generation: number; index: number } | null>(null);
   const [replayFrameIndex, setReplayFrameIndex] = useState(0);
   const [isReplaying, setIsReplaying] = useState(false);
@@ -637,7 +639,7 @@ function TrainingStudio({
         <div className="training-config-body">
           <p className="training-description">Evaluate candidate networks inside your JavaScript Playground. Fitness is calculated by the environment; the evolution engine handles selection, crossover, mutation, and generations.</p>
           <div className="training-config-grid">
-            <label>Inference backend<select value={inferenceBackend} onChange={(event) => setInferenceBackend(event.target.value as InferenceBackend)} disabled={status === "running"}><option value="auto">Auto · browser chooses</option><option value="low-power">Low power · NPU preference</option><option value="high-performance">High performance · GPU preference</option><option value="webnn-cpu">WebNN · CPU preference</option><option value="javascript">JavaScript · CPU</option></select></label>
+            <label>Inference backend<select value={inferenceBackend} onChange={(event) => setInferenceBackend(event.target.value as InferenceBackend)} disabled={status === "running"}><option value="auto">Auto · browser chooses</option><option value="npu">NPU · Chromium device request</option><option value="low-power">Low power · browser preference</option><option value="high-performance">High performance · GPU preference</option><option value="webnn-cpu">WebNN · CPU preference</option><option value="javascript">JavaScript · CPU</option></select></label>
             <label>Playground<select value={selectedPlaygroundId} onChange={(event) => { setSelectedPlaygroundId(event.target.value); setNetwork(null); setSelectedNetworkId(""); }}><option value="">Select a saved Playground…</option>{savedPlaygrounds.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.definition.inputSize}→{p.definition.outputSize}</option>)}</select></label>
             <label>Compatible Network<select value={selectedNetworkId} onChange={(event) => { setSelectedNetworkId(event.target.value); const item = compatibleNetworks.find((x) => x.id === event.target.value); if (item) setNetwork(item.network); }}><option value="">Select a compatible Network…</option>{compatibleNetworks.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
             {selectedPlayground?.definition.parameters.map((parameter) => <label key={parameter.key}>{parameter.label}
@@ -680,12 +682,16 @@ function TrainingStudio({
       </section>
 
       <section className="panel population-live-panel">
-        <div className="panel-heading compact">
+        <div className="panel-heading compact population-panel-heading">
           <div><div className="panel-kicker">LIVE POPULATION</div><strong>Generation {activeGeneration + 1} · {config.populationSize} agents</strong></div>
-          <span>{Object.values(populationViews).filter((item) => item.finished).length} / {config.populationSize} finished</span>
+          <div className="population-header-stats">
+            <span>Best score <strong>{best ? best.fitness.toFixed(5) : "—"}</strong></span>
+            <span>{Object.values(populationViews).filter((item) => item.finished).length} / {config.populationSize} finished</span>
+          </div>
         </div>
         <p className="population-live-description">Every candidate is playing its own Snake game simultaneously. Each board is driven by that candidate's neural network.</p>
         <div className="population-grid-controls">
+          <label className="population-hide-finished"><input type="checkbox" checked={hideFinishedAgents} onChange={(event) => setHideFinishedAgents(event.target.checked)} /> Hide completed agents</label>
           <label>Grid density
             <select value={populationColumns} onChange={(event) => setPopulationColumns(Number(event.target.value))}>
               <option value={2}>2 columns</option><option value={3}>3 columns</option><option value={4}>4 columns</option>
@@ -694,8 +700,9 @@ function TrainingStudio({
           </label>
         </div>
         <div className="population-board-grid" style={{ gridTemplateColumns: "repeat(" + populationColumns + ", minmax(0, 1fr))" }}>
-          {Array.from({ length: config.populationSize }, (_, index) => {
-            const candidate = populationViews[index];
+          {Array.from({ length: config.populationSize }, (_, index) => ({ index, candidate: populationViews[index] }))
+            .filter(({ candidate }) => !hideFinishedAgents || !candidate?.finished)
+            .map(({ index, candidate }) => {
             return <button type="button" className={"population-agent-card " + (candidate?.finished ? "is-finished" : "")} key={index}
               onClick={() => { setSelectedAgent({ generation: activeGeneration, index }); setReplayFrameIndex(0); setIsReplaying(false); }}>
               <div className="population-agent-heading"><strong>Agent {String(index + 1).padStart(2, "0")}</strong><span className={candidate?.error ? "candidate-failed" : candidate?.finished ? "candidate-ok" : "population-agent-running"}>{candidate?.error ? "FAILED" : candidate?.finished ? "DONE" : candidate?.view ? "PLAYING" : status === "running" ? "STARTING" : "WAITING"}</span></div>
@@ -705,6 +712,7 @@ function TrainingStudio({
             </button>;
           })}
         </div>
+        {hideFinishedAgents && Object.values(populationViews).filter((item) => item.finished).length === config.populationSize && <p className="empty-logs population-all-finished">All agents in this generation have finished.</p>}
         {selectedAgent && (() => {
           const key = selectedAgent.generation + "-" + selectedAgent.index;
           const frames = populationReplays[key] ?? [];
@@ -957,7 +965,7 @@ function PlaygroundOverview({
           {savePlaygroundMessage && <span className="save-message">{savePlaygroundMessage}</span>}
           {savePlaygroundError && <span className="environment-error">{savePlaygroundError}</span>}
         </div>
-        <div className="playground-network-controls"><label>Select Network<select value={selectedNetworkId} onChange={(event) => setSelectedNetworkId(event.target.value)}><option value="">Select a compatible Network…</option>{compatibleNetworks.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Inference backend<select value={inferenceBackend} onChange={(event) => setInferenceBackend(event.target.value as InferenceBackend)} disabled={status === "running"}><option value="auto">Auto · browser chooses</option><option value="low-power">Low power · NPU preference</option><option value="high-performance">High performance · GPU preference</option><option value="webnn-cpu">WebNN · CPU preference</option><option value="javascript">JavaScript · CPU</option></select></label><button className="secondary-button" onClick={() => setShowNetworkBuilder(true)}><Plus size={14} /> Create</button><button className="primary-button" onClick={runEnvironment} disabled={!selectedNetwork || status === "running"}><Play size={14} /> Run Environment</button></div>
+        <div className="playground-network-controls"><label>Select Network<select value={selectedNetworkId} onChange={(event) => setSelectedNetworkId(event.target.value)}><option value="">Select a compatible Network…</option>{compatibleNetworks.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Inference backend<select value={inferenceBackend} onChange={(event) => setInferenceBackend(event.target.value as InferenceBackend)} disabled={status === "running"}><option value="auto">Auto · browser chooses</option><option value="npu">NPU · Chromium device request</option><option value="low-power">Low power · browser preference</option><option value="high-performance">High performance · GPU preference</option><option value="webnn-cpu">WebNN · CPU preference</option><option value="javascript">JavaScript · CPU</option></select></label><button className="secondary-button" onClick={() => setShowNetworkBuilder(true)}><Plus size={14} /> Create</button><button className="primary-button" onClick={runEnvironment} disabled={!selectedNetwork || status === "running"}><Play size={14} /> Run Environment</button></div>
         <p className="training-description">{backendStatus}</p>
         <div className="playground-step-heading">3. Write environment code</div>
         <div className="environment-editor-meta">

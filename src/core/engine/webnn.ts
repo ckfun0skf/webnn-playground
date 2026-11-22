@@ -1,6 +1,6 @@
 import { assertValidNetwork } from "../model/validate";
 import type { MLPNetwork } from "../model/types";
-interface MLContextOptions { powerPreference?: "default" | "high-performance" | "low-power"; accelerated?: boolean }
+interface MLContextOptions { powerPreference?: "default" | "high-performance" | "low-power"; accelerated?: boolean; /** Chromium-specific legacy device selector; not part of the current WebNN standard. */ deviceType?: "npu" }
 interface MLOperandDescriptor { dataType: "float32"; shape: number[] }
 interface MLOperand {}
 interface MLTensor { destroy(): void }
@@ -33,8 +33,8 @@ export async function createWebNNPredictor(
  const Builder = (globalThis as unknown as { MLGraphBuilder?: MLGraphBuilderConstructor }).MLGraphBuilder;
  if (!ml || typeof ml.createContext !== "function") throw new Error("WebNN is not exposed in this Worker. Enable WebNN in a supported browser and use HTTPS.");
  if (!Builder) throw new Error("MLGraphBuilder is unavailable in this Worker.");
- // WebNN accepts preferences, not a guaranteed physical device selection.
- // The browser and operating system retain control over the actual compute device.
+ // The NPU deviceType hint is Chromium-specific and is not part of the current W3C WebNN API.
+ // Other backends may ignore it; WebNN does not expose a portable way to verify the selected device.
  const context = await ml.createContext(options);
  let graph: MLGraph | undefined;
  let inputTensor: MLTensor | undefined;
