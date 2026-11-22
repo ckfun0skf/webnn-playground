@@ -99,7 +99,17 @@ export default function ResourceLibrary({ source, onLoadPlayground, onLoadNetwor
       <div className="panel-heading"><div><div className="panel-kicker">REUSABLE ENVIRONMENTS</div><h2>Saved Playgrounds</h2></div><span className="model-chip">{playgrounds.length} SAVED</span></div>
       {playgrounds.length === 0 ? <p className="empty-logs">No saved Playgrounds yet. Save the current environment above.</p> : <div className="saved-network-list">{playgrounds.map((p) => <div className="saved-network-row" key={p.id}>
         <div className="saved-network-icon"><FlaskConical size={18} /></div><div className="saved-network-copy"><strong>{p.name}</strong><span>{p.definition.inputSize} inputs · {p.definition.outputSize} outputs · v{p.version} · {p.id}</span></div>
-        <button className="secondary-button" onClick={() => onLoadPlayground(p.source)}>Load</button><button className="small-icon-button" title="Delete Playground" onClick={() => void removePlayground(p)}><Trash2 size={14} /></button>
+        <button className="secondary-button" onClick={() => onLoadPlayground(p.source)}>Load</button>
+        <button className="secondary-button" onClick={async () => {
+          const nextName = window.prompt("Rename Playground", p.name)?.trim();
+          if (!nextName || nextName === p.name) return;
+          try {
+            const definition = { ...p.definition, name: nextName };
+            await savePlayground(definition, p.source, nextName);
+            setPlaygrounds((items) => items.map((item) => item.id === p.id ? { ...item, name: nextName, definition, updatedAt: Date.now() } : item));
+          } catch (renameError) { setError(renameError instanceof Error ? renameError.message : String(renameError)); }
+        }}>Rename</button>
+        <button className="small-icon-button" title="Delete Playground" aria-label="Delete Playground" onClick={() => void removePlayground(p)}><Trash2 size={14} /></button>
       </div>)}</div>}
     </section>
     <section className="panel">
