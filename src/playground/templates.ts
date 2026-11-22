@@ -16,20 +16,8 @@ export const PLAYGROUND_TEMPLATES = [
     inputSize: 11,
     outputSize: 3,
     parameters: [
-      {
-        key: "maxStepWithoutApple",
-        label: "Maximum steps without an apple",
-        type: "number",
-        default: 144,
-        min: 1,
-        max: 10000,
-        step: 1,
-        description: "End the session after this many consecutive steps without eating an apple.",
-      },
-    ],
-    parameters: [
-      { key: "maxStepWithoutApple", label: "Maximum steps without an apple", type: "number", default: 144, min: 1, max: 10000, step: 1 },
-      { key: "randomSeed", label: "Random seed", type: "randomSeed", default: 42 },
+      { key: "maxStepWithoutApple", label: "Maximum steps without an apple", type: "number" as const, default: 144, min: 1, max: 10000, step: 1, description: "End the session after this many consecutive steps without eating an apple." },
+      { key: "randomSeed", label: "Random seed", type: "randomSeed" as const, default: 42, description: "Shared seed across candidates within one generation." },
     ],
     source: snakeSource,
   },

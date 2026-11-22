@@ -129,7 +129,7 @@ export default function App() {
           </div>
         </div>
         {workspace === "network" && <NetworkOverview network={network} setNetwork={setNetwork} onSaveNetwork={saveToLibrary} inputText={inputText} setInputText={setInputText} prediction={prediction} setPrediction={setPrediction} inferenceError={inferenceError} setInferenceError={setInferenceError} />}
-        {workspace === "training" && <TrainingStudio network={network} setNetwork={setNetwork} onSaveNetwork={saveToLibrary} resourceRevision={resourceRevision} setWorkspace={setWorkspace} />}
+        {workspace === "training" && <TrainingStudio setNetwork={setNetwork} onSaveNetwork={saveToLibrary} resourceRevision={resourceRevision} setWorkspace={setWorkspace} />}
         {workspace === "playground" && <PlaygroundOverview source={environmentSource} setSource={setEnvironmentSource} onSaveNetwork={saveToLibrary} onPlaygroundSaved={() => setResourceRevision((v) => v + 1)} resourceRevision={resourceRevision} />}
         {workspace === "library" && <NetworkLibrary revision={libraryRevision} onLoad={(model) => { setNetwork(model); setWorkspace("network"); }} />}
         {workspace === "resources" && <ResourceLibrary source={environmentSource} onLoadPlayground={(source) => { setEnvironmentSource(source); setWorkspace("playground"); }} onLoadNetwork={(model) => { setNetwork(model); setWorkspace("network"); }} revision={resourceRevision} onChanged={() => setResourceRevision((v) => v + 1)} />}
@@ -417,13 +417,11 @@ function EnvironmentVisualization({ view }: { view: unknown }) {
   return <pre>{view === null ? "Environment-defined state will appear here." : JSON.stringify(view, null, 2)}</pre>;
 }
 function TrainingStudio({
-  network,
   setNetwork,
   onSaveNetwork,
   setWorkspace,
   resourceRevision,
 }: {
-  network: MLPNetwork | null;
   setNetwork: (network: MLPNetwork | null) => void;
   onSaveNetwork: (network: MLPNetwork) => Promise<void>;
   resourceRevision: number;
