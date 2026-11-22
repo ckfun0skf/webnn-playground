@@ -382,6 +382,8 @@ type GridVisualization = {
   cells?: { x: number; y: number; state?: string; label?: string | number }[];
   title?: string;
   metrics?: { label: string; value: string | number }[];
+  header?: (string | { label: string; value?: string | number })[];
+  footer?: (string | { label: string; value?: string | number })[];
 };
 
 type MetricsVisualization = {
@@ -438,7 +440,9 @@ function EnvironmentVisualization({ view }: { view: unknown }) {
     const width = Math.max(1, Math.min(64, Math.floor(grid.width || 1)));
     const height = Math.max(1, Math.min(64, Math.floor(grid.height || 1)));
     const cells = Array.isArray(grid.cells) ? grid.cells : [];
+    const renderLabels = (items: GridVisualization["header"]) => items?.map((item, index) => <span key={index}>{typeof item === "string" ? item : item.value === undefined ? item.label : item.label + ": " + item.value}</span>);
     return <div className="generic-playground-view">
+      {grid.header?.length ? <div className="playground-view-labels header">{renderLabels(grid.header)}</div> : null}
       {grid.title && <strong className="generic-view-title">{grid.title}</strong>}
       <div className="generic-playground-grid" style={{ gridTemplateColumns: "repeat(" + width + ", minmax(0, 1fr))" }}>
         {Array.from({ length: width * height }, (_, index) => {
@@ -449,13 +453,14 @@ function EnvironmentVisualization({ view }: { view: unknown }) {
         })}
       </div>
       {grid.metrics && <div className="generic-view-metrics">{grid.metrics.map((item) => <span key={item.label}>{item.label} <strong>{item.value}</strong></span>)}</div>}
+      {grid.footer?.length ? <div className="playground-view-labels footer">{renderLabels(grid.footer)}</div> : null}
     </div>;
   }
   if (view && typeof view === "object" && (view as MetricsVisualization).type === "metrics") {
     const data = view as MetricsVisualization;
     return <div className="generic-playground-view">
       {data.title && <strong className="generic-view-title">{data.title}</strong>}
-      <div className="generic-view-metrics">{data.metrics.map((item) => <span key={item.label}>{item.label} <strong>{item.value}{item.unit ? " " + item.unit : ""}</strong></span>)}</div>
+      {data.metrics.length > 0 && <div className="generic-view-metrics">{data.metrics.map((item) => <span key={item.label}>{item.label} <strong>{item.value}{item.unit ? " " + item.unit : ""}</strong></span>)}</div>}
     </div>;
   }
   return <pre>{view === null ? "Environment-defined state will appear here." : JSON.stringify(view, null, 2)}</pre>;
@@ -821,7 +826,7 @@ function PlaygroundOverview({
     setPlaygroundInputSize(template.inputSize);
     setPlaygroundOutputSize(template.outputSize);
     setPlaygroundParametersJson(JSON.stringify(template.parameters, null, 2));
-    if (template.network) setNetwork(createMLP(template.network));
+    if ("network" in template && template.network) setNetwork(createMLP(template.network));
     setRenderedView(null);
     setResult(null); setLogs([]); setError(null); setStatus("idle");
   };
