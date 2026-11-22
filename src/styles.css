@@ -630,3 +630,12 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   width: 100%;
   min-width: 0;
 }
+
+
+/* Training visualization performance controls */
+.training-visualization-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 12px 22px; margin: 12px 0; }
+.training-visualization-controls > label { display: grid; gap: 6px; color: #aeb5c1; font-size: 10px; }
+.training-visualization-controls .training-render-toggle { display: flex; align-items: center; gap: 8px; min-height: 32px; cursor: pointer; }
+.training-visualization-controls input[type="checkbox"] { accent-color: #9385df; }
+.training-visualization-controls select { min-width: 160px; height: 32px; padding: 0 8px; color: #d0d6e0; background: #11161d; border: 1px solid #343d49; border-radius: 5px; font: 10px var(--mono); }
+@media (max-width: 600px) { .training-visualization-controls { align-items: stretch; flex-direction: column; } }

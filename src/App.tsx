@@ -447,7 +447,9 @@ function TrainingStudio({
   const [events, setEvents] = useState<{ generation: number; candidateIndex: number; fitness: number; error?: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [playbackDelay, setPlaybackDelay] = useState(80);
+  const [playbackDelay, setPlaybackDelay] = useState(0);
+  const [renderPopulation, setRenderPopulation] = useState(true);
+  const [renderIntervalMs, setRenderIntervalMs] = useState(250);
   const [inferenceBackend, setInferenceBackend] = useState<InferenceBackend>("auto");
   const [backendStatus, setBackendStatus] = useState("Backend will be selected when training starts.");
   const [bestReplay, setBestReplay] = useState<{ generation: number; index: number; frames: unknown[] } | null>(null);
@@ -559,7 +561,7 @@ function TrainingStudio({
         environmentSource: selectedPlayground.source,
         config,
         inferenceBackend,
-        configForEnvironment: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, ...environmentParameters },
+        configForEnvironment: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, renderIntervalMs, ...environmentParameters },
         signal: controller.signal,
         onBackend: (status) => setBackendStatus(status.detail),
         onCandidate: (candidate) => {
@@ -587,14 +589,16 @@ function TrainingStudio({
             },
           }));
         },
-        onPopulationRender: (generation, candidateIndex, view) => {
-          setActiveGeneration(generation);
-          setPopulationViews((current) => ({ ...current, [candidateIndex]: { ...current[candidateIndex], view } }));
-          const replayKey = generation + "-" + candidateIndex;
-          const frames = [...(currentReplaysRef.current[replayKey] ?? []), view].slice(-1200);
-          currentReplaysRef.current = { ...currentReplaysRef.current, [replayKey]: frames };
-          setPopulationReplays(currentReplaysRef.current);
-        },
+        ...(renderPopulation ? {
+          onPopulationRender: (generation: number, candidateIndex: number, view: unknown) => {
+            setActiveGeneration(generation);
+            setPopulationViews((current) => ({ ...current, [candidateIndex]: { ...current[candidateIndex], view } }));
+            const replayKey = generation + "-" + candidateIndex;
+            const frames = [...(currentReplaysRef.current[replayKey] ?? []), view].slice(-1200);
+            currentReplaysRef.current = { ...currentReplaysRef.current, [replayKey]: frames };
+            setPopulationReplays(currentReplaysRef.current);
+          },
+        } : {}),
         onGeneration: (summary) => {
           setHistory((current) => [...current, summary]);
           if (summary.generation < config.generations - 1) {
@@ -663,10 +667,24 @@ function TrainingStudio({
             <div><span className="panel-kicker">SELECTED PLAYGROUND</span><strong>{selectedPlayground ? selectedPlayground.name + " · " + selectedPlayground.definition.inputSize + " inputs / " + selectedPlayground.definition.outputSize + " outputs" : "Save a Playground in Resource Library first"}</strong></div>
             <button className="text-button" onClick={() => setWorkspace("playground")}><Code2 size={13} /> Edit environment</button>
           </div>
+          <div className="training-visualization-controls">
+            <label className="training-render-toggle">
+              <input type="checkbox" checked={renderPopulation} disabled={status === "running"} onChange={(event) => setRenderPopulation(event.target.checked)} />
+              Render live population
+            </label>
+            <label>Live view updates
+              <select value={renderIntervalMs} disabled={!renderPopulation || status === "running"} onChange={(event) => setRenderIntervalMs(Number(event.target.value))}>
+                <option value={100}>10 times / second</option>
+                <option value={250}>4 times / second</option>
+                <option value={500}>2 times / second</option>
+                <option value={1000}>1 time / second</option>
+              </select>
+            </label>
+          </div>
           <div className="playback-speed-control">
-            <label htmlFor="training-speed">Population playback speed</label>
+            <label htmlFor="training-speed">Simulation step delay</label>
             <input id="training-speed" type="range" min="0" max="500" step="10" disabled={status === "running"} value={playbackDelay} onChange={(event) => setPlaybackDelay(Number(event.target.value))} />
-            <span>{playbackDelay === 0 ? "Fastest" : playbackDelay + " ms / step"}</span>
+            <span>{playbackDelay === 0 ? "0 ms · unthrottled" : playbackDelay + " ms / step"}</span>
           </div>
           <p className="training-description">{backendStatus}</p>
           <div className="training-actions">
@@ -690,30 +708,32 @@ function TrainingStudio({
           </div>
         </div>
         <p className="population-live-description">Every candidate is playing its own Snake game simultaneously. Each board is driven by that candidate's neural network.</p>
-        <div className="population-grid-controls">
-          <label className="population-hide-finished"><input type="checkbox" checked={hideFinishedAgents} onChange={(event) => setHideFinishedAgents(event.target.checked)} /> Hide completed agents</label>
-          <label>Grid density
-            <select value={populationColumns} onChange={(event) => setPopulationColumns(Number(event.target.value))}>
-              <option value={2}>2 columns</option><option value={3}>3 columns</option><option value={4}>4 columns</option>
-              <option value={5}>5 columns</option><option value={6}>6 columns</option><option value={8}>8 columns</option>
-            </select>
-          </label>
-        </div>
-        <div className="population-board-grid" style={{ gridTemplateColumns: "repeat(" + populationColumns + ", minmax(0, 1fr))" }}>
-          {Array.from({ length: config.populationSize }, (_, index) => ({ index, candidate: populationViews[index] }))
-            .filter(({ candidate }) => !hideFinishedAgents || !candidate?.finished)
-            .map(({ index, candidate }) => {
-            return <button type="button" className={"population-agent-card " + (candidate?.finished ? "is-finished" : "")} key={index}
-              onClick={() => { setSelectedAgent({ generation: activeGeneration, index }); setReplayFrameIndex(0); setIsReplaying(false); }}>
-              <div className="population-agent-heading"><strong>Agent {String(index + 1).padStart(2, "0")}</strong><span className={candidate?.error ? "candidate-failed" : candidate?.finished ? "candidate-ok" : "population-agent-running"}>{candidate?.error ? "FAILED" : candidate?.finished ? "DONE" : candidate?.view ? "PLAYING" : status === "running" ? "STARTING" : "WAITING"}</span></div>
-              {candidate?.view ? <EnvironmentVisualization view={candidate.view} /> : <div className="population-board-placeholder">Waiting for first frame…</div>}
-              {candidate?.finished && <div className="population-agent-fitness">Fitness <strong>{candidate.fitness?.toFixed(2) ?? "—"}</strong></div>}
-              <span className="population-agent-open">{candidate?.finished ? "View · Replay available" : "View live agent"}</span>
-            </button>;
-          })}
-        </div>
-        {hideFinishedAgents && Object.values(populationViews).filter((item) => item.finished).length === config.populationSize && <p className="empty-logs population-all-finished">All agents in this generation have finished.</p>}
-        {selectedAgent && (() => {
+        {renderPopulation ? <>
+          <div className="population-grid-controls">
+            <label className="population-hide-finished"><input type="checkbox" checked={hideFinishedAgents} onChange={(event) => setHideFinishedAgents(event.target.checked)} /> Hide completed agents</label>
+            <label>Grid density
+              <select value={populationColumns} onChange={(event) => setPopulationColumns(Number(event.target.value))}>
+                <option value={2}>2 columns</option><option value={3}>3 columns</option><option value={4}>4 columns</option>
+                <option value={5}>5 columns</option><option value={6}>6 columns</option><option value={8}>8 columns</option>
+              </select>
+            </label>
+          </div>
+          <div className="population-board-grid" style={{ gridTemplateColumns: "repeat(" + populationColumns + ", minmax(0, 1fr))" }}>
+            {Array.from({ length: config.populationSize }, (_, index) => ({ index, candidate: populationViews[index] }))
+              .filter(({ candidate }) => !hideFinishedAgents || !candidate?.finished)
+              .map(({ index, candidate }) => {
+              return <button type="button" className={"population-agent-card " + (candidate?.finished ? "is-finished" : "")} key={index}
+                onClick={() => { setSelectedAgent({ generation: activeGeneration, index }); setReplayFrameIndex(0); setIsReplaying(false); }}>
+                <div className="population-agent-heading"><strong>Agent {String(index + 1).padStart(2, "0")}</strong><span className={candidate?.error ? "candidate-failed" : candidate?.finished ? "candidate-ok" : "population-agent-running"}>{candidate?.error ? "FAILED" : candidate?.finished ? "DONE" : candidate?.view ? "PLAYING" : status === "running" ? "STARTING" : "WAITING"}</span></div>
+                {candidate?.view ? <EnvironmentVisualization view={candidate.view} /> : <div className="population-board-placeholder">Waiting for first frame…</div>}
+                {candidate?.finished && <div className="population-agent-fitness">Fitness <strong>{candidate.fitness?.toFixed(2) ?? "—"}</strong></div>}
+                <span className="population-agent-open">{candidate?.finished ? "View · Replay available" : "View live agent"}</span>
+              </button>;
+            })}
+          </div>
+          {hideFinishedAgents && Object.values(populationViews).filter((item) => item.finished).length === config.populationSize && <p className="empty-logs population-all-finished">All agents in this generation have finished.</p>}
+        </> : <p className="population-live-description">Live rendering is disabled to reduce UI and message overhead. Training statistics and the best candidate will still be updated; agent replays are not recorded.</p>}
+        {renderPopulation && selectedAgent && (() => {
           const key = selectedAgent.generation + "-" + selectedAgent.index;
           const frames = populationReplays[key] ?? [];
           const selectedCandidate = selectedAgent.generation === activeGeneration ? populationViews[selectedAgent.index] : undefined;
