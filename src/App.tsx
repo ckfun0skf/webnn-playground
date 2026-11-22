@@ -6,7 +6,8 @@ import { DEFAULT_NEUROEVOLUTION_CONFIG, runNeuroevolution } from "./training/neu
 import type { CandidateEvaluation, GenerationSummary, NeuroevolutionConfig } from "./training/neuroevolution";
 import snakeEnvironmentSource from "./playground/examples/snake.environment.js?raw";
 import { deleteSavedNetwork, listSavedNetworks, listSavedPlaygrounds, saveNetwork, savePlayground, saveTrainingRun, type SavedNetworkRecord, type SavedPlaygroundRecord } from "./storage";
-import ResourceLibrary from "./ResourceLibrary";\nimport type { PlaygroundDefinition } from "./playground/api";
+import ResourceLibrary from "./ResourceLibrary";
+import type { PlaygroundDefinition } from "./playground/api";
 import {
   Activity,
   Save,
@@ -125,24 +126,6 @@ export default function App() {
             <button className="primary-button"><Plus size={15} /> New {workspace === "playground" ? "environment" : workspace === "network" ? "network" : "experiment"}</button>
           </div>
         </div>
-        {workspace === "network" && !network && (
-          <section className="getting-started panel">
-            <div className="getting-started-copy">
-              <span className="panel-kicker">NEW HERE? START WITH A WORKING EXAMPLE</span>
-              <h2>Train a neural network to play Snake</h2>
-              <p>No setup required. Load the example, watch the game board, then evolve a better Snake agent.</p>
-              <div className="getting-started-steps">
-                <span><b>1</b> Load Snake</span><span><b>2</b> Run the simulation</span><span><b>3</b> Train the agent</span>
-              </div>
-            </div>
-            <button className="primary-button" onClick={() => {
-              setEnvironmentSource(snakeEnvironmentSource);
-              setNetwork(createMLP({ name: "Snake agent", inputSize: 11, layers: [{ units: 16, activation: "relu" }, { units: 3, activation: "softmax" }] }));
-              setWorkspace("playground");
-            }}><Play size={14} /> Try Snake</button>
-          </section>
-        )}
-
         {workspace === "network" && <NetworkOverview network={network} setNetwork={setNetwork} onSaveNetwork={saveToLibrary} inputText={inputText} setInputText={setInputText} prediction={prediction} setPrediction={setPrediction} inferenceError={inferenceError} setInferenceError={setInferenceError} />}
         {workspace === "training" && <TrainingStudio network={network} setNetwork={setNetwork} onSaveNetwork={saveToLibrary} resourceRevision={resourceRevision} setWorkspace={setWorkspace} />}
         {workspace === "playground" && <PlaygroundOverview network={network} setNetwork={setNetwork} source={environmentSource} setSource={setEnvironmentSource} onPlaygroundSaved={() => setResourceRevision((v) => v + 1)} resourceRevision={resourceRevision} />}
@@ -387,6 +370,11 @@ export async function sessionEnd(ctx, result) {
   // Optional cleanup after a successful evaluation.
 }`;
 
+const PLAYGROUND_TEMPLATES = [
+  { id: "blank", name: "Blank Playground", inputSize: 3, outputSize: 2, parameters: [], source: DEFAULT_ENVIRONMENT_CODE },
+  { id: "snake", name: "Snake Simulation", inputSize: 11, outputSize: 3, parameters: [{ key: "maxSteps", label: "Maximum steps", type: "number", default: 500, min: 1, max: 10000, step: 100, description: "Maximum simulation steps." }], source: snakeEnvironmentSource, network: { name: "Snake agent", inputSize: 11, layers: [{ units: 16, activation: "relu" as const }, { units: 3, activation: "softmax" as const }] } },
+];
+
 type GridVisualization = {
   type: "grid";
   width: number;
@@ -402,37 +390,49 @@ type MetricsVisualization = {
   metrics: { label: string; value: string | number; unit?: string }[];
 };
 
-type SnakeVisualization = {
-  type: "snake";
-  width: number;
-  height: number;
-  snake: { x: number; y: number; head?: boolean }[];
-  food: { x: number; y: number } | null;
-  score: number;
-  steps: number;
-  terminal: boolean;
+type CanvasCommand =
+  | { op: "fillRect" | "strokeRect"; x: number; y: number; width: number; height: number; color?: string; lineWidth?: number }
+  | { op: "line"; x1: number; y1: number; x2: number; y2: number; color?: string; lineWidth?: number }
+  | { op: "circle"; x: number; y: number; radius: number; color?: string; stroke?: boolean; lineWidth?: number }
+  | { op: "text"; text: string; x: number; y: number; color?: string; font?: string; align?: CanvasTextAlign };
+type CanvasVisualization = {
+  type: "canvas"; width: number; height: number; background?: string;
+  commands?: CanvasCommand[]; header?: (string | { label: string; value?: string | number })[];
+  footer?: (string | { label: string; value?: string | number })[];
 };
-
+function CanvasView({ view }: { view: CanvasVisualization }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext("2d");
+    if (!canvas || !context) return;
+    const width = Math.max(1, Math.min(4096, Math.floor(view.width || 1)));
+    const height = Math.max(1, Math.min(4096, Math.floor(view.height || 1)));
+    canvas.width = width; canvas.height = height;
+    context.clearRect(0, 0, width, height);
+    if (view.background) { context.fillStyle = view.background; context.fillRect(0, 0, width, height); }
+    for (const command of (Array.isArray(view.commands) ? view.commands : []).slice(0, 20000)) {
+      context.save();
+      context.fillStyle = command.color || "#e8eaf0";
+      context.strokeStyle = command.color || "#e8eaf0";
+      context.lineWidth = "lineWidth" in command ? Math.max(0.1, command.lineWidth || 1) : 1;
+      if (command.op === "fillRect") context.fillRect(command.x, command.y, command.width, command.height);
+      else if (command.op === "strokeRect") context.strokeRect(command.x, command.y, command.width, command.height);
+      else if (command.op === "line") { context.beginPath(); context.moveTo(command.x1, command.y1); context.lineTo(command.x2, command.y2); context.stroke(); }
+      else if (command.op === "circle") { context.beginPath(); context.arc(command.x, command.y, Math.max(0, command.radius), 0, Math.PI * 2); command.stroke ? context.stroke() : context.fill(); }
+      else if (command.op === "text") { context.font = command.font || "14px sans-serif"; context.textAlign = command.align || "left"; context.fillText(command.text, command.x, command.y); }
+      context.restore();
+    }
+  }, [view]);
+  const labels = (items: CanvasVisualization["header"]) => items?.map((item, index) => typeof item === "string" ? item : item.value === undefined ? item.label : item.label + ": " + item.value).map((item, index) => <span key={index}>{item}</span>);
+  return <div className="generic-playground-view">
+    {view.header?.length ? <div className="playground-view-labels header">{labels(view.header)}</div> : null}
+    <canvas ref={canvasRef} className="playground-canvas" aria-label="Playground canvas" />
+    {view.footer?.length ? <div className="playground-view-labels footer">{labels(view.footer)}</div> : null}
+  </div>;
+}
 function EnvironmentVisualization({ view }: { view: unknown }) {
-  if (view && typeof view === "object" && (view as SnakeVisualization).type === "snake") {
-    const snakeView = view as SnakeVisualization;
-    return (
-      <div className="snake-visualization">
-        <div className="snake-board" style={{ gridTemplateColumns: "repeat(" + snakeView.width + ", minmax(0, 1fr))" }}>
-          {Array.from({ length: snakeView.width * snakeView.height }, (_, index) => {
-            const x = index % snakeView.width;
-            const y = Math.floor(index / snakeView.width);
-            const segment = snakeView.snake.find((part) => part.x === x && part.y === y);
-            const isFood = snakeView.food?.x === x && snakeView.food?.y === y;
-            const cellClass = segment ? (segment.head ? "head" : "body") : isFood ? "food" : "";
-            return <div key={index} className={"snake-board-cell " + cellClass} />;
-          })}
-        </div>
-        <div className="snake-board-stats"><span>Score <strong>{snakeView.score}</strong></span><span>Steps <strong>{snakeView.steps}</strong></span><span>{snakeView.terminal ? "Finished" : "Running"}</span></div>
-      </div>
-    );
-  }
-
+  if (view && typeof view === "object" && (view as CanvasVisualization).type === "canvas") return <CanvasView view={view as CanvasVisualization} />;
   if (view && typeof view === "object" && (view as GridVisualization).type === "grid") {
     const grid = view as GridVisualization;
     const width = Math.max(1, Math.min(64, Math.floor(grid.width || 1)));
@@ -801,6 +801,7 @@ function PlaygroundOverview({
   const [savePlaygroundMessage, setSavePlaygroundMessage] = useState<string | null>(null);
   const [savePlaygroundError, setSavePlaygroundError] = useState<string | null>(null);
   const [playgroundParametersJson, setPlaygroundParametersJson] = useState("[]");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("blank");
   useEffect(() => {
     let active = true;
     listSavedPlaygrounds().then((items) => {
@@ -810,14 +811,20 @@ function PlaygroundOverview({
     }).catch((e) => setSavePlaygroundError(e instanceof Error ? e.message : String(e)));
     return () => { active = false; };
   }, [resourceRevision]);
-  useEffect(() => {
-    if (source.includes('id: "snake"')) {
-      setPlaygroundName("Snake");
-      setPlaygroundId("snake");
-      setPlaygroundInputSize(11);
-      setPlaygroundOutputSize(3);
-    }
-  }, [source]);
+
+  const applySelectedTemplate = () => {
+    const template = PLAYGROUND_TEMPLATES.find((item) => item.id === selectedTemplateId);
+    if (!template) return;
+    setSource(template.source);
+    setPlaygroundName(template.name);
+    setPlaygroundId(template.id);
+    setPlaygroundInputSize(template.inputSize);
+    setPlaygroundOutputSize(template.outputSize);
+    setPlaygroundParametersJson(JSON.stringify(template.parameters, null, 2));
+    if (template.network) setNetwork(createMLP(template.network));
+    setRenderedView(null);
+    setResult(null); setLogs([]); setError(null); setStatus("idle");
+  };
   const saveCurrentPlayground = async () => {
     try {
       if (!source.trim()) throw new Error("Environment JavaScript cannot be empty.");
@@ -856,11 +863,7 @@ function PlaygroundOverview({
     setSavePlaygroundError(null);
     setResult(null); setLogs([]); setStatus("idle");
   };
-  const [renderedView, setRenderedView] = useState<unknown>(source === snakeEnvironmentSource ? {
-    type: "snake", width: 12, height: 12,
-    snake: [{ x: 6, y: 6, head: true }, { x: 5, y: 6 }, { x: 4, y: 6 }],
-    food: { x: 9, y: 3 }, score: 0, steps: 0, terminal: false,
-  } : null);
+  const [renderedView, setRenderedView] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -916,23 +919,10 @@ function PlaygroundOverview({
           <div><div className="panel-kicker">CUSTOM ENVIRONMENT</div><h2>Environment module</h2></div>
           <div className="panel-tools">
             <span className="model-chip">JAVASCRIPT · ES MODULE</span>
-            <button className="secondary-button" onClick={() => {
-              setSource(snakeEnvironmentSource);
-              setNetwork(createMLP({
-                name: "Snake agent",
-                inputSize: 11,
-                layers: [{ units: 16, activation: "relu" }, { units: 3, activation: "softmax" }],
-              }));
-              setRenderedView({
-                type: "snake", width: 12, height: 12,
-                snake: [{ x: 6, y: 6, head: true }, { x: 5, y: 6 }, { x: 4, y: 6 }],
-                food: { x: 9, y: 3 }, score: 0, steps: 0, terminal: false,
-              });
-              setResult(null);
-              setLogs([]);
-              setError(null);
-              setStatus("idle");
-            }}>Load Snake</button>
+            <select aria-label="Playground template" value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
+              {PLAYGROUND_TEMPLATES.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+            </select>
+            <button className="secondary-button" onClick={applySelectedTemplate}>Apply template</button>
           </div>
         </div>
         <div className="playground-resource-controls">
@@ -951,13 +941,7 @@ function PlaygroundOverview({
           <span>Exports <code>sessionStart(ctx)</code> and optional <code>sessionEnd(ctx, result)</code></span>
           <span>{source.split("\n").length} lines</span>
         </div>
-        <div className="playground-howto">
-          <strong>How to run this example</strong>
-          <span>1. Click <b>Load Snake</b> to load the game and its matching 11-input / 3-output network.</span>
-          <span>2. Click <b>Run environment</b> to watch one Snake session.</span>
-          <span>3. Open <b>Training</b> and click <b>Start evolution</b> to train across a population.</span>
-        </div>
-        <textarea
+       <textarea
           className="environment-code"
           spellCheck={false}
           value={source}
