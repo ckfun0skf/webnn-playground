@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { appendDenseLayer, removeLastDenseLayer, resizeLayerUnits, updateLayerParameters, type MLPNetwork } from "./core/model";
+import { assertValidNetwork, appendDenseLayer, removeLastDenseLayer, resizeLayerUnits, updateLayerParameters, type MLPNetwork } from "./core/model";
+import { downloadNetworkFile, exportOnnxNetwork, importOnnxNetwork, uniqueImportedNetwork } from "./core/model/io";
 import { compileMLP } from "./core/engine";
 import { runPlaygroundSession } from "./playground/runtime";
 import { DEFAULT_NEUROEVOLUTION_CONFIG, runNeuroevolution } from "./training/neuroevolution";
@@ -12,6 +13,8 @@ import NetworkBuilderDialog from "./NetworkBuilderDialog";
 import PlaygroundParameterEditor from "./PlaygroundParameterEditor";
 import {
   Activity,
+  Download,
+  FileUp,
   Save,
   BrainCircuit,
   ChevronDown,
@@ -1104,7 +1107,12 @@ function NetworkLibrary({
 }) {
   const [records, setRecords] = useState<SavedNetworkRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const refresh = async () => setRecords(await listSavedNetworks());
 
   useEffect(() => {
     let active = true;
@@ -1115,6 +1123,51 @@ function NetworkLibrary({
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [revision]);
+
+  const importNetwork = async (file: File) => {
+    setImporting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      if (file.size === 0 || file.size > 100 * 1024 * 1024) throw new Error("Choose a non-empty network file smaller than 100 MB.");
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      let parsed: MLPNetwork;
+      if (extension === "json") {
+        const value: unknown = JSON.parse(await file.text());
+        assertValidNetwork(value);
+        parsed = value;
+      } else if (extension === "onnx") {
+        parsed = importOnnxNetwork(new Uint8Array(await file.arrayBuffer()), file.name);
+      } else {
+        throw new Error("Unsupported file type. Choose a native .json or ONNX .onnx file.");
+      }
+      const imported = uniqueImportedNetwork(parsed, new Set(records.map((record) => record.id)));
+      await saveNetwork(imported, imported.name);
+      await refresh();
+      setMessage(`Imported "${imported.name}" as a new network.`);
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : String(importError));
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const exportNetwork = (record: SavedNetworkRecord, format: "json" | "onnx") => {
+    try {
+      const baseName = record.name.trim().replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "") || "network";
+      if (format === "json") {
+        downloadNetworkFile(`${baseName}.json`, JSON.stringify(record.network, null, 2), "application/json");
+      } else {
+        const bytes = exportOnnxNetwork(record.network);
+        downloadNetworkFile(`${baseName}.onnx`, bytes, "application/octet-stream");
+      }
+      setError(null);
+      setMessage(`Exported "${record.name}" as ${format.toUpperCase()}.`);
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : String(exportError));
+    }
+  };
 
   const remove = async (id: string) => {
     try {
@@ -1129,10 +1182,20 @@ function NetworkLibrary({
     <section className="panel network-library-panel">
       <div className="panel-heading">
         <div><div className="panel-kicker">LOCAL MODEL STORAGE</div><h2>Saved networks</h2></div>
-        <span className="model-chip">INDEXEDDB</span>
+        <div className="panel-tools">
+          <span className="model-chip">INDEXEDDB</span>
+          <button className="secondary-button" onClick={() => fileInputRef.current?.click()} disabled={importing}>
+            <FileUp size={14} /> {importing ? "Importing…" : "Import Network"}
+          </button>
+          <input ref={fileInputRef} type="file" accept=".json,.onnx,application/json,application/octet-stream" hidden onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void importNetwork(file);
+          }} />
+        </div>
       </div>
+      <p className="resource-help">Import native JSON networks or compatible ONNX models. Export any saved network in either format.</p>
       {loading ? <p className="empty-logs">Loading saved networks…</p> : records.length === 0 ? (
-        <div className="library-empty"><FolderOpen size={25} /><strong>No saved networks yet</strong><p>Save a model from the Network workspace or keep the best candidate from a Neuroevolution run.</p></div>
+        <div className="library-empty"><FolderOpen size={25} /><strong>No saved networks yet</strong><p>Save a model from the Network workspace, import a JSON or ONNX file, or keep the best candidate from a Neuroevolution run.</p></div>
       ) : (
         <div className="saved-network-list">
           {records.map((record) => (
@@ -1143,6 +1206,8 @@ function NetworkLibrary({
                 <span>{record.network.inputSize} inputs · {record.network.layers.map((layer) => layer.units).join(" → ")} · Updated {new Date(record.updatedAt).toLocaleString()}</span>
               </div>
               <button className="secondary-button" onClick={() => onLoad(record.network)}>Load</button>
+              <button className="secondary-button" onClick={() => exportNetwork(record, "json")}><Download size={13} /> JSON</button>
+              <button className="secondary-button" onClick={() => exportNetwork(record, "onnx")}><Download size={13} /> ONNX</button>
               <button className="secondary-button" onClick={async () => {
                 const nextName = window.prompt("Rename Network", record.name)?.trim();
                 if (!nextName || nextName === record.name) return;
@@ -1157,8 +1222,8 @@ function NetworkLibrary({
           ))}
         </div>
       )}
+      {message && <p className="save-message">{message}</p>}
       {error && <div className="environment-error">{error}</div>}
     </section>
   );
 }
-

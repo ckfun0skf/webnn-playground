@@ -319,7 +319,7 @@ h1 { margin: 0; font-size: 25px; font-weight: 600; letter-spacing: -.7px; }
 .save-message { margin: 7px 0 0 !important; color: #79cda2 !important; font-size: 9px !important; line-height: 1.4; }
 .network-library-panel { overflow: hidden; }
 .saved-network-list { padding: 0 16px 8px; }
-.saved-network-row { display: flex; align-items: center; gap: 12px; padding: 13px 0; border-top: 1px solid #292e38; }
+.saved-network-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 13px 0; border-top: 1px solid #292e38; }
 .saved-network-icon { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 auto; color: #b5a7ff; background: #292440; border: 1px solid #40385f; border-radius: 7px; }
 .saved-network-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 5px; }
 .saved-network-copy strong { color: #d2d7e0; font-size: 11px; font-weight: 600; }
