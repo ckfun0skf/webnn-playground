@@ -5,10 +5,11 @@ import { runPlaygroundSession } from "./playground/runtime";
 import { DEFAULT_NEUROEVOLUTION_CONFIG, runNeuroevolution } from "./training/neuroevolution";
 import type { CandidateEvaluation, GenerationSummary, NeuroevolutionConfig } from "./training/neuroevolution";
 import snakeEnvironmentSource from "./playground/examples/snake.environment.js?raw";
-import { deleteSavedNetwork, listSavedNetworks, listSavedPlaygrounds, saveNetwork, saveTrainingRun, type SavedNetworkRecord, type SavedPlaygroundRecord } from "./storage";
-import ResourceLibrary from "./ResourceLibrary";
+import { deleteSavedNetwork, listSavedNetworks, listSavedPlaygrounds, saveNetwork, savePlayground, saveTrainingRun, type SavedNetworkRecord, type SavedPlaygroundRecord } from "./storage";
+import ResourceLibrary from "./ResourceLibrary";\nimport type { PlaygroundDefinition } from "./playground/api";
 import {
   Activity,
+  Save,
   BrainCircuit,
   ChevronDown,
   CircleHelp,
@@ -143,8 +144,8 @@ export default function App() {
         )}
 
         {workspace === "network" && <NetworkOverview network={network} setNetwork={setNetwork} onSaveNetwork={saveToLibrary} inputText={inputText} setInputText={setInputText} prediction={prediction} setPrediction={setPrediction} inferenceError={inferenceError} setInferenceError={setInferenceError} />}
-        {workspace === "training" && <TrainingStudio network={network} setNetwork={setNetwork} onSaveNetwork={saveToLibrary} environmentSource={environmentSource} setWorkspace={setWorkspace} />}
-        {workspace === "playground" && <PlaygroundOverview network={network} setNetwork={setNetwork} source={environmentSource} setSource={setEnvironmentSource} />}
+        {workspace === "training" && <TrainingStudio network={network} setNetwork={setNetwork} onSaveNetwork={saveToLibrary} resourceRevision={resourceRevision} setWorkspace={setWorkspace} />}
+        {workspace === "playground" && <PlaygroundOverview network={network} setNetwork={setNetwork} source={environmentSource} setSource={setEnvironmentSource} onPlaygroundSaved={() => setResourceRevision((v) => v + 1)} resourceRevision={resourceRevision} />}
         {workspace === "library" && <NetworkLibrary revision={libraryRevision} onLoad={(model) => { setNetwork(model); setWorkspace("network"); }} />}
         {workspace === "resources" && <ResourceLibrary source={environmentSource} onLoadPlayground={(source) => { setEnvironmentSource(source); setWorkspace("playground"); }} onLoadNetwork={(model) => { setNetwork(model); setWorkspace("network"); }} revision={resourceRevision} onChanged={() => setResourceRevision((v) => v + 1)} />}
       </main>
@@ -424,11 +425,12 @@ function TrainingStudio({
   setNetwork,
   onSaveNetwork,
   setWorkspace,
+  resourceRevision,
 }: {
   network: MLPNetwork | null;
   setNetwork: (network: MLPNetwork | null) => void;
   onSaveNetwork: (network: MLPNetwork) => Promise<void>;
-  environmentSource: string;
+  resourceRevision: number;
   setWorkspace: (workspace: Workspace) => void;
 }) {
   const [config, setConfig] = useState<NeuroevolutionConfig>({ ...DEFAULT_NEUROEVOLUTION_CONFIG });
@@ -461,7 +463,7 @@ function TrainingStudio({
       setSelectedPlaygroundId((current) => current || playgrounds[0]?.id || "");
     }).catch((loadError) => setError(loadError instanceof Error ? loadError.message : String(loadError)));
     return () => { active = false; };
-  }, []);
+  }, [resourceRevision]);
   const compatibleNetworks = selectedPlayground
     ? savedCompatibleNetworks.filter((item) => item.network.inputSize === selectedPlayground.definition.inputSize && item.network.layers[item.network.layers.length - 1]?.units === selectedPlayground.definition.outputSize)
     : [];
@@ -734,11 +736,15 @@ function PlaygroundOverview({
   setNetwork,
   source,
   setSource,
+  onPlaygroundSaved,
+  resourceRevision,
 }: {
   network: MLPNetwork | null;
   setNetwork: (network: MLPNetwork | null) => void;
   source: string;
   setSource: (source: string) => void;
+  onPlaygroundSaved: () => void;
+  resourceRevision: number;
 }) {
   const [status, setStatus] = useState<"idle" | "running" | "completed" | "failed" | "cancelled">("idle");
   const [result, setResult] = useState<{ fitness: number; metrics?: Record<string, unknown> } | null>(null);
@@ -746,6 +752,66 @@ function PlaygroundOverview({
   const [playbackDelay, setPlaybackDelay] = useState(80);
   const [environmentMaxSteps, setEnvironmentMaxSteps] = useState(500);
   const [environmentSeed, setEnvironmentSeed] = useState(42);
+  const [playgroundName, setPlaygroundName] = useState("Custom Playground");
+  const [playgroundId, setPlaygroundId] = useState("custom-playground");
+  const [playgroundInputSize, setPlaygroundInputSize] = useState(network?.inputSize ?? 3);
+  const [playgroundOutputSize, setPlaygroundOutputSize] = useState(network?.layers[network.layers.length - 1]?.units ?? 2);
+  const [savedPlaygrounds, setSavedPlaygrounds] = useState<SavedPlaygroundRecord[]>([]);
+  const [loadPlaygroundId, setLoadPlaygroundId] = useState("");
+  const [savePlaygroundMessage, setSavePlaygroundMessage] = useState<string | null>(null);
+  const [savePlaygroundError, setSavePlaygroundError] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    listSavedPlaygrounds().then((items) => {
+      if (!active) return;
+      setSavedPlaygrounds(items);
+      setLoadPlaygroundId((current) => current || items[0]?.id || "");
+    }).catch((e) => setSavePlaygroundError(e instanceof Error ? e.message : String(e)));
+    return () => { active = false; };
+  }, [resourceRevision]);
+  const saveCurrentPlayground = async () => {
+    try {
+      if (!source.trim()) throw new Error("Environment JavaScript cannot be empty.");
+      if (!playgroundName.trim()) throw new Error("Enter a Playground name.");
+      if (!/^[a-z0-9][a-z0-9._-]*$/i.test(playgroundId.trim())) throw new Error("Playground ID may contain letters, numbers, dots, underscores, and hyphens.");
+      if (!Number.isInteger(playgroundInputSize) || playgroundInputSize < 1 || !Number.isInteger(playgroundOutputSize) || playgroundOutputSize < 1) throw new Error("Input/output dimensions must be positive integers.");
+      const stringValue = (key: string, fallback: string) => source.match(new RegExp(key + "\\s*:\\s*[\"']([^\"']+)[\"']"))?.[1] ?? fallback;
+      const numberValue = (key: string, fallback: number) => Number(source.match(new RegExp(key + "\\s*:\\s*(\\d+)"))?.[1] ?? fallback);
+      const parameters: PlaygroundDefinition["parameters"] = [];
+      const definition: PlaygroundDefinition = {
+        id: playgroundId.trim(), name: playgroundName.trim(),
+        version: numberValue("version", 1),
+        inputSize: playgroundInputSize, outputSize: playgroundOutputSize, parameters,
+      };
+      // Preserve a definition's explicitly declared parameter defaults when source uses a simple literal array.
+      const parameterMatch = source.match(/parameters\\s*:\\s*(\\[[\\s\\S]*?\\])\\s*,?\\s*}/);
+      if (parameterMatch) {
+        try { definition.parameters = JSON.parse(parameterMatch[1]); } catch { /* author can define parameters later in Resource Library */ }
+      }
+      await savePlayground(definition, source, playgroundName.trim());
+      const items = await listSavedPlaygrounds();
+      setSavedPlaygrounds(items);
+      setLoadPlaygroundId(definition.id);
+      onPlaygroundSaved();
+      setSavePlaygroundError(null);
+      setSavePlaygroundMessage("Saved. This Playground is now available in Training Studio.");
+    } catch (e) {
+      setSavePlaygroundMessage(null);
+      setSavePlaygroundError(e instanceof Error ? e.message : String(e));
+    }
+  };
+  const loadSavedPlayground = () => {
+    const item = savedPlaygrounds.find((entry) => entry.id === loadPlaygroundId);
+    if (!item) return;
+    setSource(item.source);
+    setPlaygroundName(item.name);
+    setPlaygroundId(item.id);
+    setPlaygroundInputSize(item.definition.inputSize);
+    setPlaygroundOutputSize(item.definition.outputSize);
+    setSavePlaygroundMessage("Loaded " + item.name + ".");
+    setSavePlaygroundError(null);
+    setResult(null); setLogs([]); setStatus("idle");
+  };
   const [renderedView, setRenderedView] = useState<unknown>(source === snakeEnvironmentSource ? {
     type: "snake", width: 12, height: 12,
     snake: [{ x: 6, y: 6, head: true }, { x: 5, y: 6 }, { x: 4, y: 6 }],
@@ -825,7 +891,7 @@ function PlaygroundOverview({
             }}>Load Snake</button>
           </div>
         </div>
-        <div className="environment-editor-meta">
+        <div className="playground-resource-controls">\n          <label>Playground name<input value={playgroundName} onChange={(e) => setPlaygroundName(e.target.value)} /></label>\n          <label>Stable ID<input value={playgroundId} onChange={(e) => setPlaygroundId(e.target.value)} /></label>\n          <label>Input size<input type="number" min="1" value={playgroundInputSize} onChange={(e) => setPlaygroundInputSize(e.target.valueAsNumber)} /></label>\n          <label>Output size<input type="number" min="1" value={playgroundOutputSize} onChange={(e) => setPlaygroundOutputSize(e.target.valueAsNumber)} /></label>\n          <button className="primary-button" onClick={() => void saveCurrentPlayground()}><Save size={14} /> Save Playground</button>\n          <label>Saved Playground<select value={loadPlaygroundId} onChange={(e) => setLoadPlaygroundId(e.target.value)}><option value="">Select saved Playground…</option>{savedPlaygrounds.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.definition.inputSize}→{item.definition.outputSize}</option>)}</select></label>\n          <button className="secondary-button" onClick={loadSavedPlayground} disabled={!savedPlaygrounds.some((item) => item.id === loadPlaygroundId)}>Load selected</button>\n          {savePlaygroundMessage && <span className="save-message">{savePlaygroundMessage}</span>}\n          {savePlaygroundError && <span className="environment-error">{savePlaygroundError}</span>}\n        </div>\n        <div className="environment-editor-meta">
           <span>Exports <code>sessionStart(ctx)</code> and optional <code>sessionEnd(ctx, result)</code></span>
           <span>{source.split("\n").length} lines</span>
         </div>
