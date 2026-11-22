@@ -46,6 +46,7 @@ class FakeWorker {
 
 describe("runPlaygroundSession", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -82,6 +83,68 @@ describe("runPlaygroundSession", () => {
     expect(worker?.terminated).toBe(true);
     expect(reports).toEqual([{ step: 1 }]);
     expect(frames).toEqual([{ type: "grid", cells: [0, 1, 0] }]);
+  });
+
+  it("does not impose a default wall-clock timeout", async () => {
+    vi.useFakeTimers();
+    let worker: FakeWorker | undefined;
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        worker = this;
+      }
+      postMessage() {
+        // Keep the session open until the test explicitly ends it.
+      }
+    });
+    const network = createMLP({
+      inputSize: 2,
+      layers: [{ units: 1 }],
+      random: () => 0.5,
+    });
+    const result = runPlaygroundSession({
+      source: "export async function sessionStart(ctx) {}",
+      network,
+      session: { sessionId: "unlimited", generation: 0, candidateIndex: 0, seed: 1 },
+    });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    let settled = false;
+    void result.then(() => { settled = true; }, () => { settled = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    worker?.onmessage?.({ data: { type: "incomplete" } } as MessageEvent);
+    await expect(result).rejects.toThrow(/without calling finish/);
+  });
+
+  it("applies a wall-clock timeout only when explicitly configured", async () => {
+    vi.useFakeTimers();
+    let worker: FakeWorker | undefined;
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        worker = this;
+      }
+      postMessage() {
+        // Keep the session open until the timeout fires.
+      }
+    });
+    const network = createMLP({
+      inputSize: 2,
+      layers: [{ units: 1 }],
+      random: () => 0.5,
+    });
+    const result = runPlaygroundSession({
+      source: "export async function sessionStart(ctx) {}",
+      network,
+      session: { sessionId: "timed", generation: 0, candidateIndex: 0, seed: 1 },
+      timeoutMs: 250,
+    });
+
+    await vi.advanceTimersByTimeAsync(250);
+    await expect(result).rejects.toThrow("Session timed out after 250ms.");
+    expect(worker?.terminated).toBe(true);
   });
 
   it("rejects when the environment ends without submitting fitness", async () => {

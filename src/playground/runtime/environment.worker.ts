@@ -11,7 +11,7 @@ type StartMessage = {
   config: Record<string, unknown>;
   renderEnabled: boolean;
   reportEnabled: boolean;
-  inferenceBackend: "auto" | "javascript";
+  inferenceBackend: "auto" | "low-power" | "high-performance" | "webnn-cpu" | "javascript";
 };
 type IncomingMessage =
   | StartMessage
@@ -66,9 +66,17 @@ async function runSession(message: StartMessage): Promise<void> {
   let disposePredictor: (() => void) | undefined;
   try {
     let predictor: (input: readonly number[]) => number[] | Promise<number[]>;
-    if (message.inferenceBackend === "auto") {
+    if (message.inferenceBackend !== "javascript") {
       try {
-        const webnnPredictor = await createWebNNPredictor(message.network);
+        const powerPreference = message.inferenceBackend === "low-power"
+          ? "low-power"
+          : message.inferenceBackend === "high-performance"
+            ? "high-performance"
+            : "default";
+        const webnnPredictor = await createWebNNPredictor(message.network, {
+          powerPreference,
+          accelerated: message.inferenceBackend !== "webnn-cpu",
+        });
         disposePredictor = webnnPredictor.dispose;
         predictor = async (input) => {
           try {
@@ -86,12 +94,19 @@ async function runSession(message: StartMessage): Promise<void> {
             return cpuPredictor(input);
           }
         };
+        const preferenceLabel = message.inferenceBackend === "low-power"
+          ? "low-power preference"
+          : message.inferenceBackend === "high-performance"
+            ? "high-performance preference"
+            : message.inferenceBackend === "webnn-cpu"
+              ? "CPU preference"
+              : "automatic device selection";
         scope.postMessage({
           type: "backend",
           backend: "webnn",
           detail: webnnPredictor.accelerated
-            ? "WebNN reports accelerated=true (GPU/NPU-class execution requested with low-power preference). The browser does not expose the exact device."
-            : "WebNN reports accelerated=false; this context is not using a massively parallel accelerator.",
+            ? `WebNN reports accelerated=true with ${preferenceLabel}. The browser selected an accelerated path but does not expose whether it is a GPU or NPU.`
+            : `WebNN reports accelerated=false with ${preferenceLabel}; this context prefers CPU inference.`,
         });
       } catch (webnnError) {
         predictor = compileMLP(message.network);

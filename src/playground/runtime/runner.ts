@@ -27,10 +27,10 @@ export function runPlaygroundSession(
     let finishReceived = false;
     let sessionResult: PlaygroundSessionResult | null = null;
     let cancellationTimer: ReturnType<typeof setTimeout> | undefined;
-    const timeoutMs = options.timeoutMs ?? 30_000;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
 
     const cleanup = () => {
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
       if (cancellationTimer) clearTimeout(cancellationTimer);
       options.signal?.removeEventListener("abort", onAbort);
       worker.terminate();
@@ -52,10 +52,16 @@ export function runPlaygroundSession(
       } satisfies WorkerRequest);
       cancellationTimer = setTimeout(() => fail(cancellationError()), 500);
     };
-    const timeout = setTimeout(
-      () => fail(new Error(`Session timed out after ${timeoutMs}ms.`)),
-      timeoutMs,
-    );
+    if (options.timeoutMs !== undefined) {
+      if (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0) {
+        fail(new Error("timeoutMs must be a positive finite number when provided."));
+        return;
+      }
+      timeout = setTimeout(
+        () => fail(new Error(`Session timed out after ${options.timeoutMs}ms.`)),
+        options.timeoutMs,
+      );
+    }
 
     if (options.signal?.aborted) {
       fail(cancellationError());
