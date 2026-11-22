@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FolderOpen, Trash2, Save, BrainCircuit, FlaskConical, Workflow } from "lucide-react";
+import { Trash2, Save, BrainCircuit, FlaskConical, Workflow } from "lucide-react";
 import { deleteSavedPlayground, deleteTrainingRun, listSavedPlaygrounds, listTrainingRuns, savePlayground, type SavedPlaygroundRecord, type SavedTrainingRunRecord } from "./storage";
 import type { MLPNetwork } from "./core/model";
 import type { PlaygroundDefinition } from "./playground/api";
