@@ -74,7 +74,7 @@ async function runSession(message: StartMessage): Promise<void> {
           try {
             return await webnnPredictor.predict(input);
           } catch (inferenceError) {
-            disposePredictor?.();
+            try { disposePredictor?.(); } catch { /* Continue with the CPU fallback. */ }
             disposePredictor = undefined;
             const cpuPredictor = compileMLP(message.network);
             predictor = cpuPredictor;
@@ -86,7 +86,13 @@ async function runSession(message: StartMessage): Promise<void> {
             return cpuPredictor(input);
           }
         };
-        scope.postMessage({ type: "backend", backend: "webnn", detail: "WebNN acceleration requested with low-power preference. The browser selects the device; NPU use is not guaranteed or exposed." });
+        scope.postMessage({
+          type: "backend",
+          backend: "webnn",
+          detail: webnnPredictor.accelerated
+            ? "WebNN reports accelerated=true (GPU/NPU-class execution requested with low-power preference). The browser does not expose the exact device."
+            : "WebNN reports accelerated=false; this context is not using a massively parallel accelerator.",
+        });
       } catch (webnnError) {
         predictor = compileMLP(message.network);
         scope.postMessage({ type: "backend", backend: "javascript", detail: `WebNN unavailable; using JavaScript CPU inference. ${webnnError instanceof Error ? webnnError.message : String(webnnError)}` });
