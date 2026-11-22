@@ -466,6 +466,11 @@ function TrainingStudio({
   const compatibleNetworks = selectedPlayground
     ? savedCompatibleNetworks.filter((item) => item.network.inputSize === selectedPlayground.definition.inputSize && item.network.layers[item.network.layers.length - 1]?.units === selectedPlayground.definition.outputSize)
     : [];
+  const [environmentParameters, setEnvironmentParameters] = useState<Record<string, number | boolean | string>>({});
+  useEffect(() => {
+    if (!selectedPlayground) { setEnvironmentParameters({}); return; }
+    setEnvironmentParameters(Object.fromEntries(selectedPlayground.definition.parameters.map((parameter) => [parameter.key, parameter.default])));
+  }, [selectedPlaygroundId]);
 
   useEffect(() => {
     if (!isReplaying || !selectedAgent) return;
@@ -521,7 +526,7 @@ function TrainingStudio({
         initialNetwork: activeNetwork,
         environmentSource: selectedPlayground.source,
         config,
-        configForEnvironment: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, maxSteps: environmentMaxSteps },
+        configForEnvironment: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, maxSteps: environmentMaxSteps, ...environmentParameters },
         signal: controller.signal,
         onCandidate: (candidate) => {
           setEvents((current) => [...current, {
@@ -562,7 +567,7 @@ function TrainingStudio({
         id: "training-" + crypto.randomUUID(), name: selectedPlayground.name + " · " + new Date().toLocaleString(), status: "completed",
         playgroundId: selectedPlayground.id, playgroundName: selectedPlayground.name, playgroundVersion: selectedPlayground.version,
         playgroundSource: selectedPlayground.source, initialNetwork: structuredClone(activeNetwork), evolutionConfig: structuredClone(config),
-        environmentConfig: { maxSteps: environmentMaxSteps, stepDelayMs: playbackDelay, seed: config.environmentSeed },
+        environmentConfig: { maxSteps: environmentMaxSteps, stepDelayMs: playbackDelay, seed: config.environmentSeed, ...environmentParameters },
         bestNetwork, bestFitness: result.best.fitness, generationHistory: structuredClone(result.history) as unknown as Record<string, unknown>[],
         createdAt: Date.now(), completedAt: Date.now(),
       });
@@ -590,6 +595,10 @@ function TrainingStudio({
           <div className="training-config-grid">
             <label>Playground<select value={selectedPlaygroundId} onChange={(event) => { setSelectedPlaygroundId(event.target.value); setNetwork(null); setSelectedNetworkId(""); }}><option value="">Select a saved Playground…</option>{savedPlaygrounds.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.definition.inputSize}→{p.definition.outputSize}</option>)}</select></label>
             <label>Compatible Network<select value={selectedNetworkId} onChange={(event) => { setSelectedNetworkId(event.target.value); const item = compatibleNetworks.find((x) => x.id === event.target.value); if (item) setNetwork(item.network); }}><option value="">Use current / generated network</option>{compatibleNetworks.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            {selectedPlayground?.definition.parameters.map((parameter) => <label key={parameter.key}>{parameter.label}
+              {parameter.type === "boolean" ? <input type="checkbox" checked={Boolean(environmentParameters[parameter.key])} onChange={(event) => setEnvironmentParameters((current) => ({ ...current, [parameter.key]: event.target.checked }))} /> :
+                <input type={parameter.type === "number" ? "number" : "text"} min={parameter.min} max={parameter.max} step={parameter.step} value={String(environmentParameters[parameter.key] ?? parameter.default)} onChange={(event) => setEnvironmentParameters((current) => ({ ...current, [parameter.key]: parameter.type === "number" ? event.target.valueAsNumber : event.target.value }))} />}
+            </label>)}
             <label>Population size<input type="number" min="2" max="500" value={config.populationSize} onChange={(event) => updateNumber("populationSize", event.target.valueAsNumber)} /></label>
             <label>Generations<input type="number" min="1" max="1000" value={config.generations} onChange={(event) => updateNumber("generations", event.target.valueAsNumber)} /></label>
             <label>Elite count<input type="number" min="1" max={Math.max(1, config.populationSize - 1)} value={config.eliteCount} onChange={(event) => updateNumber("eliteCount", event.target.valueAsNumber)} /></label>
