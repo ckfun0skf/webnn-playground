@@ -17,24 +17,20 @@ export const PLAYGROUND_TEMPLATES = [
     outputSize: 3,
     parameters: [
       {
-        key: "maxSteps",
-        label: "Maximum steps",
+        key: "maxStepWithoutApple",
+        label: "Maximum steps without an apple",
         type: "number",
-        default: 500,
+        default: 144,
         min: 1,
         max: 10000,
-        step: 100,
-        description: "Maximum simulation steps.",
+        step: 1,
+        description: "End the session after this many consecutive steps without eating an apple.",
       },
     ],
+    parameters: [
+      { key: "maxStepWithoutApple", label: "Maximum steps without an apple", type: "number", default: 144, min: 1, max: 10000, step: 1 },
+      { key: "randomSeed", label: "Random seed", type: "randomSeed", default: 42 },
+    ],
     source: snakeSource,
-    network: {
-      name: "Snake agent",
-      inputSize: 11,
-      layers: [
-        { units: 16, activation: "relu" as const },
-        { units: 3, activation: "softmax" as const },
-      ],
-    },
   },
 ];

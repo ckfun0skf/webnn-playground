@@ -48,6 +48,7 @@ export function createMLP(options: CreateMLPOptions): MLPNetwork {
       type: "dense",
       units: fanOut,
       activation,
+      useBias: definition.useBias ?? true,
       weights,
       biases: Array.from({ length: fanOut }, () => 0),
     };

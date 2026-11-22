@@ -12,6 +12,7 @@ export function compileMLP(network: MLPNetwork): Predictor {
   const layers = network.layers.map((layer) => ({
     units: layer.units,
     activation: layer.activation,
+    useBias: layer.useBias !== false,
     weights: layer.weights.map((row) => [...row]),
     biases: [...layer.biases],
   }));
@@ -30,7 +31,7 @@ export function compileMLP(network: MLPNetwork): Predictor {
       const sums = Array.from({ length: layer.units }, (_, neuronIndex) => {
         const weightedSum = layer.weights[neuronIndex].reduce(
           (sum, weight, inputIndex) => sum + weight * values[inputIndex],
-          layer.biases[neuronIndex],
+          layer.useBias ? layer.biases[neuronIndex] : 0,
         );
         return weightedSum;
       });

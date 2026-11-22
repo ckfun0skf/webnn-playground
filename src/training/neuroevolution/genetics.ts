@@ -33,6 +33,7 @@ export function createRandomNetwork(
     layers: template.layers.map((layer) => ({
       units: layer.units,
       activation: layer.activation,
+      useBias: layer.useBias,
     })),
     random,
   });
@@ -49,7 +50,8 @@ export function crossoverNetworks(
     parentA.layers.length !== parentB.layers.length ||
     parentA.layers.some((layer, index) =>
       layer.units !== parentB.layers[index].units ||
-      layer.activation !== parentB.layers[index].activation
+      layer.activation !== parentB.layers[index].activation ||
+      layer.useBias !== parentB.layers[index].useBias
     )
   ) {
     throw new Error("Crossover requires networks with identical architectures.");
@@ -68,7 +70,7 @@ export function crossoverNetworks(
             random() < 0.5 ? weight : other.weights[rowIndex][columnIndex],
           ),
         ),
-        biases: layer.biases.map((bias, index) =>
+        biases: layer.useBias === false ? [...layer.biases] : layer.biases.map((bias, index) =>
           random() < 0.5 ? bias : other.biases[index],
         ),
       };
@@ -102,7 +104,7 @@ export function mutateNetwork(
           random() < mutationRate ? weight + gaussian(random) * mutationScale : weight,
         ),
       ),
-      biases: layer.biases.map((bias) =>
+      biases: layer.useBias === false ? [...layer.biases] : layer.biases.map((bias) =>
         random() < mutationRate ? bias + gaussian(random) * mutationScale : bias,
       ),
     })),

@@ -3,7 +3,7 @@ import type { MLPNetwork } from "../../core/model";
 export interface PlaygroundParameterDefinition {
   key: string;
   label: string;
-  type: "number" | "boolean" | "string";
+  type: "number" | "boolean" | "string" | "randomSeed";
   default: number | boolean | string;
   min?: number;
   max?: number;
@@ -40,7 +40,7 @@ export interface PlaygroundEnvironmentContext {
   report(metrics: Record<string, unknown>): void;
   render(view: unknown): void;
   random(): number;
-  /** Advances one simulation step, applies the configured playback delay, and returns false at maxSteps. */
+  /** Advances one simulation step, applies the configured playback delay, and returns false at the optional safety step budget. */
   step(): Promise<boolean>;
   yield(): Promise<void>;
   signal: AbortSignal;
