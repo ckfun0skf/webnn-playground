@@ -72,10 +72,20 @@ function argmax(values) {
 }
 
 function render(ctx, snake, food, score, steps, direction, terminal) {
+  const cells = snake.map((segment, index) => ({
+    x: segment.x,
+    y: segment.y,
+    state: index === 0 ? "active" : "success",
+    label: index === 0 ? "●" : "",
+  }));
+  if (food) cells.push({ x: food.x, y: food.y, state: "target", label: "★" });
   ctx.render({
-    type: "snake", width: WIDTH, height: HEIGHT,
-    snake: snake.map((segment, index) => ({ ...segment, head: index === 0 })),
-    food, score, steps, direction, terminal,
+    type: "grid",
+    width: WIDTH,
+    height: HEIGHT,
+    cells,
+    header: ["Snake simulation"],
+    footer: ["Score: " + score, "Steps: " + steps, terminal ? "Finished" : "Running"],
   });
 }
 
