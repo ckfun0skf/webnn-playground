@@ -24,6 +24,7 @@ export const DEFAULT_NEUROEVOLUTION_CONFIG = {
   mutationScale: 0.15,
   evaluationTimeoutMs: 30_000,
   seed: 42,
+  environmentSeed: 42,
   includeInitialNetwork: true,
 } as const;
 
@@ -55,6 +56,9 @@ function validateOptions(options: RunNeuroevolutionOptions): void {
   }
   if (!Number.isInteger(config.seed)) {
     throw new Error("seed must be an integer.");
+  }
+  if (!Number.isInteger(config.environmentSeed)) {
+    throw new Error("environmentSeed must be an integer.");
   }
   if (!Number.isFinite(config.evaluationTimeoutMs) || config.evaluationTimeoutMs <= 0) {
     throw new Error("evaluationTimeoutMs must be a positive number.");
@@ -151,7 +155,7 @@ export async function runNeuroevolution(
         throw new Error(options.signal.reason?.toString() ?? "Neuroevolution cancelled.");
       }
       const candidateId = `${runId}-g${generation}-c${candidateIndex}`;
-      const seed = Math.floor(random() * 0xffffffff);
+      const seed = config.environmentSeed;
       try {
         const result = await runPlaygroundSession({
           source: options.environmentSource,
