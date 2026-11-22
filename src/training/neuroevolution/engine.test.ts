@@ -38,6 +38,7 @@ describe("runNeuroevolution", () => {
         mutationScale: 0.1,
         evaluationTimeoutMs: 1000,
         seed: 17,
+        environmentSeed: 1234,
         includeInitialNetwork: true,
       },
       onCandidate: (candidate) => candidateEvents.push(candidate.candidateIndex),
@@ -45,6 +46,10 @@ describe("runNeuroevolution", () => {
     });
 
     expect(vi.mocked(runPlaygroundSession)).toHaveBeenCalledTimes(12);
+    for (const [callIndex, call] of vi.mocked(runPlaygroundSession).mock.calls.entries()) {
+      expect(call[0].session.seed).toBe(1234);
+      if (callIndex < 4) expect(call[0].session.generation).toBe(0);
+    }
     expect(result.evaluations).toHaveLength(12);
     expect(result.history).toHaveLength(3);
     expect(generationEvents).toEqual([0, 1, 2]);
@@ -71,6 +76,7 @@ describe("runNeuroevolution", () => {
       mutationScale: 0.1,
       evaluationTimeoutMs: 1000,
       seed: 1,
+      environmentSeed: 1,
       includeInitialNetwork: true,
     };
 

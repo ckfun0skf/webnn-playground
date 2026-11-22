@@ -5,7 +5,8 @@ import { runPlaygroundSession } from "./playground/runtime";
 import { DEFAULT_NEUROEVOLUTION_CONFIG, runNeuroevolution } from "./training/neuroevolution";
 import type { CandidateEvaluation, GenerationSummary, NeuroevolutionConfig } from "./training/neuroevolution";
 import snakeEnvironmentSource from "./playground/examples/snake.environment.js?raw";
-import { deleteSavedNetwork, listSavedNetworks, saveNetwork, type SavedNetworkRecord } from "./storage";
+import { deleteSavedNetwork, listSavedNetworks, listSavedPlaygrounds, saveNetwork, saveTrainingRun, type SavedNetworkRecord, type SavedPlaygroundRecord } from "./storage";
+import ResourceLibrary from "./ResourceLibrary";
 import {
   Activity,
   BrainCircuit,
@@ -24,13 +25,14 @@ import {
   Workflow,
 } from "lucide-react";
 
-type Workspace = "network" | "training" | "playground" | "library";
+type Workspace = "network" | "training" | "playground" | "library" | "resources";
 
 const navigation: { id: Workspace; label: string; icon: typeof BrainCircuit }[] = [
   { id: "network", label: "Network", icon: BrainCircuit },
   { id: "training", label: "Training", icon: Activity },
   { id: "playground", label: "Playground", icon: FlaskConical },
   { id: "library", label: "Network Library", icon: FolderOpen },
+  { id: "resources", label: "Resource Library", icon: Workflow },
 ];
 
 function detectCapabilities() {
@@ -45,6 +47,7 @@ export default function App() {
   const [network, setNetwork] = useState<MLPNetwork | null>(null);
   const [environmentSource, setEnvironmentSource] = useState(DEFAULT_ENVIRONMENT_CODE);
   const [libraryRevision, setLibraryRevision] = useState(0);
+  const [resourceRevision, setResourceRevision] = useState(0);
   const [inputText, setInputText] = useState("0, 0, 0");
   const [prediction, setPrediction] = useState<number[] | null>(null);
   const [inferenceError, setInferenceError] = useState<string | null>(null);
@@ -143,6 +146,7 @@ export default function App() {
         {workspace === "training" && <TrainingStudio network={network} setNetwork={setNetwork} onSaveNetwork={saveToLibrary} environmentSource={environmentSource} setWorkspace={setWorkspace} />}
         {workspace === "playground" && <PlaygroundOverview network={network} setNetwork={setNetwork} source={environmentSource} setSource={setEnvironmentSource} />}
         {workspace === "library" && <NetworkLibrary revision={libraryRevision} onLoad={(model) => { setNetwork(model); setWorkspace("network"); }} />}
+        {workspace === "resources" && <ResourceLibrary source={environmentSource} onLoadPlayground={(source) => { setEnvironmentSource(source); setWorkspace("playground"); }} onLoadNetwork={(model) => { setNetwork(model); setWorkspace("network"); }} revision={resourceRevision} onChanged={() => setResourceRevision((v) => v + 1)} />}
       </main>
     </div>
   );
@@ -154,6 +158,7 @@ function getSubtitle(workspace: Workspace) {
     case "training": return "Configure learning algorithms and track model improvement.";
     case "playground": return "Build simulations in code and connect them to neural networks.";
     case "library": return "Keep trained networks, checkpoints, and reusable models.";
+    case "resources": return "Manage reusable Playgrounds and saved Neuroevolution training runs.";
   }
 }
 
@@ -418,7 +423,6 @@ function TrainingStudio({
   network,
   setNetwork,
   onSaveNetwork,
-  environmentSource,
   setWorkspace,
 }: {
   network: MLPNetwork | null;
@@ -436,10 +440,52 @@ function TrainingStudio({
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [playbackDelay, setPlaybackDelay] = useState(80);
   const [populationViews, setPopulationViews] = useState<Record<number, { view: unknown; fitness?: number; finished?: boolean; error?: string }>>({});
+  const [populationReplays, setPopulationReplays] = useState<Record<string, unknown[]>>({});
+  const [populationColumns, setPopulationColumns] = useState(4);
+  const [selectedAgent, setSelectedAgent] = useState<{ generation: number; index: number } | null>(null);
+  const [replayFrameIndex, setReplayFrameIndex] = useState(0);
+  const [isReplaying, setIsReplaying] = useState(false);
+  const [environmentMaxSteps, setEnvironmentMaxSteps] = useState(500);
   const [activeGeneration, setActiveGeneration] = useState(0);
+  const [savedPlaygrounds, setSavedPlaygrounds] = useState<SavedPlaygroundRecord[]>([]);
+  const [selectedPlaygroundId, setSelectedPlaygroundId] = useState("");
+  const [savedCompatibleNetworks, setSavedCompatibleNetworks] = useState<SavedNetworkRecord[]>([]);
+  const [selectedNetworkId, setSelectedNetworkId] = useState("");
+  const selectedPlayground = savedPlaygrounds.find((item) => item.id === selectedPlaygroundId) ?? null;
+  useEffect(() => {
+    let active = true;
+    Promise.all([listSavedPlaygrounds(), listSavedNetworks()]).then(([playgrounds, networks]) => {
+      if (!active) return;
+      setSavedPlaygrounds(playgrounds);
+      setSavedCompatibleNetworks(networks);
+      setSelectedPlaygroundId((current) => current || playgrounds[0]?.id || "");
+    }).catch((loadError) => setError(loadError instanceof Error ? loadError.message : String(loadError)));
+    return () => { active = false; };
+  }, []);
+  const compatibleNetworks = selectedPlayground
+    ? savedCompatibleNetworks.filter((item) => item.network.inputSize === selectedPlayground.definition.inputSize && item.network.layers[item.network.layers.length - 1]?.units === selectedPlayground.definition.outputSize)
+    : [];
+  const [environmentParameters, setEnvironmentParameters] = useState<Record<string, number | boolean | string>>({});
+  useEffect(() => {
+    if (!selectedPlayground) { setEnvironmentParameters({}); return; }
+    setEnvironmentParameters(Object.fromEntries(selectedPlayground.definition.parameters.map((parameter) => [parameter.key, parameter.default])));
+  }, [selectedPlaygroundId]);
+
+  useEffect(() => {
+    if (!isReplaying || !selectedAgent) return;
+    const frames = populationReplays[selectedAgent.generation + "-" + selectedAgent.index] ?? [];
+    if (replayFrameIndex >= frames.length - 1) {
+      setIsReplaying(false);
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setReplayFrameIndex((index) => Math.min(index + 1, frames.length - 1));
+    }, Math.max(30, playbackDelay || 30));
+    return () => window.clearInterval(timer);
+  }, [isReplaying, selectedAgent, replayFrameIndex, playbackDelay, populationReplays]);
   const abortRef = useRef<AbortController | null>(null);
 
-  type NumericConfigKey = "populationSize" | "generations" | "eliteCount" | "tournamentSize" | "crossoverRate" | "mutationRate" | "mutationScale" | "evaluationTimeoutMs" | "seed";
+  type NumericConfigKey = "populationSize" | "generations" | "eliteCount" | "environmentSeed" | "tournamentSize" | "crossoverRate" | "mutationRate" | "mutationScale" | "evaluationTimeoutMs" | "seed";
   const updateNumber = (key: NumericConfigKey, value: number) => {
     if (!Number.isFinite(value)) return;
     setConfig((current) => {
@@ -451,12 +497,14 @@ function TrainingStudio({
   };
 
   const startTraining = async () => {
-    const activeNetwork = network ?? createMLP({
-      name: "Neuroevolution seed network",
-      inputSize: 2,
-      layers: [{ units: 2, activation: "softmax" }],
+    if (!selectedPlayground) { setError("Save a Playground in Resource Library, then select it here."); return; }
+    const networkIsCompatible = network && network.inputSize === selectedPlayground.definition.inputSize && network.layers[network.layers.length - 1]?.units === selectedPlayground.definition.outputSize;
+    const activeNetwork = networkIsCompatible ? network! : createMLP({
+      name: selectedPlayground.name + " seed network",
+      inputSize: selectedPlayground.definition.inputSize,
+      layers: [{ units: Math.max(4, selectedPlayground.definition.outputSize * 2), activation: "relu" }, { units: selectedPlayground.definition.outputSize, activation: "softmax" }],
     });
-    if (!network) setNetwork(activeNetwork);
+    if (!networkIsCompatible) setNetwork(activeNetwork);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -465,6 +513,9 @@ function TrainingStudio({
     setHistory([]);
     setEvents([]);
     setPopulationViews({});
+    setPopulationReplays({});
+    setSelectedAgent(null);
+    setIsReplaying(false);
     setActiveGeneration(0);
     setError(null);
 
@@ -472,9 +523,9 @@ function TrainingStudio({
       const outputSize = activeNetwork.layers[activeNetwork.layers.length - 1].units;
       const result = await runNeuroevolution({
         initialNetwork: activeNetwork,
-        environmentSource,
+        environmentSource: selectedPlayground.source,
         config,
-        configForEnvironment: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay },
+        configForEnvironment: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, maxSteps: environmentMaxSteps, ...environmentParameters },
         signal: controller.signal,
         onCandidate: (candidate) => {
           setEvents((current) => [...current, {
@@ -497,6 +548,11 @@ function TrainingStudio({
         onPopulationRender: (generation, candidateIndex, view) => {
           setActiveGeneration(generation);
           setPopulationViews((current) => ({ ...current, [candidateIndex]: { ...current[candidateIndex], view } }));
+          const replayKey = generation + "-" + candidateIndex;
+          setPopulationReplays((current) => ({
+            ...current,
+            [replayKey]: [...(current[replayKey] ?? []), view].slice(-1200),
+          }));
         },
         onGeneration: (summary) => {
           setHistory((current) => [...current, summary]);
@@ -504,6 +560,17 @@ function TrainingStudio({
         },
       });
       setBest(result.best);
+      const bestNetwork = { ...structuredClone(result.best.network), id: crypto.randomUUID(), name: selectedPlayground.name + " best · " + new Date().toLocaleDateString() };
+      await onSaveNetwork(bestNetwork);
+      await saveTrainingRun({
+        id: "training-" + crypto.randomUUID(), name: selectedPlayground.name + " · " + new Date().toLocaleString(), status: "completed",
+        playgroundId: selectedPlayground.id, playgroundName: selectedPlayground.name, playgroundVersion: selectedPlayground.version,
+        playgroundSource: selectedPlayground.source, initialNetwork: structuredClone(activeNetwork), evolutionConfig: structuredClone(config) as unknown as Record<string, unknown>,
+        environmentConfig: { maxSteps: environmentMaxSteps, stepDelayMs: playbackDelay, seed: config.environmentSeed, ...environmentParameters },
+        bestNetwork, bestFitness: result.best.fitness, generationHistory: structuredClone(result.history) as unknown as Record<string, unknown>[],
+        createdAt: Date.now(), completedAt: Date.now(),
+      });
+      setSaveMessage("Training Run saved; best candidate added as a new Network.");
       setStatus("completed");
     } catch (trainingError) {
       setError(trainingError instanceof Error ? trainingError.message : String(trainingError));
@@ -525,6 +592,12 @@ function TrainingStudio({
         <div className="training-config-body">
           <p className="training-description">Evaluate candidate networks inside your JavaScript Playground. Fitness is calculated by the environment; the evolution engine handles selection, crossover, mutation, and generations.</p>
           <div className="training-config-grid">
+            <label>Playground<select value={selectedPlaygroundId} onChange={(event) => { setSelectedPlaygroundId(event.target.value); setNetwork(null); setSelectedNetworkId(""); }}><option value="">Select a saved Playground…</option>{savedPlaygrounds.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.definition.inputSize}→{p.definition.outputSize}</option>)}</select></label>
+            <label>Compatible Network<select value={selectedNetworkId} onChange={(event) => { setSelectedNetworkId(event.target.value); const item = compatibleNetworks.find((x) => x.id === event.target.value); if (item) setNetwork(item.network); }}><option value="">Use current / generated network</option>{compatibleNetworks.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            {selectedPlayground?.definition.parameters.map((parameter) => <label key={parameter.key}>{parameter.label}
+              {parameter.type === "boolean" ? <input type="checkbox" checked={Boolean(environmentParameters[parameter.key])} onChange={(event) => setEnvironmentParameters((current) => ({ ...current, [parameter.key]: event.target.checked }))} /> :
+                <input type={parameter.type === "number" ? "number" : "text"} min={parameter.min} max={parameter.max} step={parameter.step} value={String(environmentParameters[parameter.key] ?? parameter.default)} onChange={(event) => setEnvironmentParameters((current) => ({ ...current, [parameter.key]: parameter.type === "number" ? event.target.valueAsNumber : event.target.value }))} />}
+            </label>)}
             <label>Population size<input type="number" min="2" max="500" value={config.populationSize} onChange={(event) => updateNumber("populationSize", event.target.valueAsNumber)} /></label>
             <label>Generations<input type="number" min="1" max="1000" value={config.generations} onChange={(event) => updateNumber("generations", event.target.valueAsNumber)} /></label>
             <label>Elite count<input type="number" min="1" max={Math.max(1, config.populationSize - 1)} value={config.eliteCount} onChange={(event) => updateNumber("eliteCount", event.target.valueAsNumber)} /></label>
@@ -532,10 +605,12 @@ function TrainingStudio({
             <label>Mutation rate<input type="number" min="0" max="1" step="0.01" value={config.mutationRate} onChange={(event) => updateNumber("mutationRate", event.target.valueAsNumber)} /></label>
             <label>Mutation scale<input type="number" min="0" step="0.01" value={config.mutationScale} onChange={(event) => updateNumber("mutationScale", event.target.valueAsNumber)} /></label>
             <label>Crossover rate<input type="number" min="0" max="1" step="0.01" value={config.crossoverRate} onChange={(event) => updateNumber("crossoverRate", event.target.valueAsNumber)} /></label>
-            <label>Random seed<input type="number" step="1" value={config.seed} onChange={(event) => updateNumber("seed", event.target.valueAsNumber)} /></label>
+            <label>Evolution seed<input type="number" step="1" value={config.seed} onChange={(event) => updateNumber("seed", event.target.valueAsNumber)} /></label>
+            <label>Environment seed<input type="number" step="1" value={config.environmentSeed} onChange={(event) => updateNumber("environmentSeed", event.target.valueAsNumber)} /></label>
+            <label>Max steps per agent<input type="number" min="1" max="10000" step="1" value={environmentMaxSteps} onChange={(event) => setEnvironmentMaxSteps(Math.max(1, event.target.valueAsNumber || 1))} /></label>
           </div>
           <div className="training-environment-link">
-            <div><span className="panel-kicker">ENVIRONMENT SOURCE</span><strong>{environmentSource.trim() ? "Custom Playground code is ready" : "No environment code"}</strong></div>
+            <div><span className="panel-kicker">SELECTED PLAYGROUND</span><strong>{selectedPlayground ? selectedPlayground.name + " · " + selectedPlayground.definition.inputSize + " inputs / " + selectedPlayground.definition.outputSize + " outputs" : "Save a Playground in Resource Library first"}</strong></div>
             <button className="text-button" onClick={() => setWorkspace("playground")}><Code2 size={13} /> Edit environment</button>
           </div>
           <div className="playback-speed-control">
@@ -547,7 +622,7 @@ function TrainingStudio({
             {status === "running" ? (
               <button className="secondary-button" onClick={cancelTraining}>Cancel training</button>
             ) : (
-              <button className="primary-button" onClick={startTraining} disabled={!environmentSource.trim()}><Play size={14} /> Start evolution</button>
+              <button className="primary-button" onClick={startTraining} disabled={!selectedPlayground}><Play size={14} /> Start evolution</button>
             )}
             <span className="training-status"><span className={`status-dot ${status === "running" || status === "completed" ? "good" : status === "failed" ? "warn" : "neutral"}`} />{status}</span>
           </div>
@@ -561,16 +636,45 @@ function TrainingStudio({
           <span>{Object.values(populationViews).filter((item) => item.finished).length} / {config.populationSize} finished</span>
         </div>
         <p className="population-live-description">Every candidate is playing its own Snake game simultaneously. Each board is driven by that candidate's neural network.</p>
-        <div className="population-board-grid">
+        <div className="population-grid-controls">
+          <label>Grid density
+            <select value={populationColumns} onChange={(event) => setPopulationColumns(Number(event.target.value))}>
+              <option value={2}>2 columns</option><option value={3}>3 columns</option><option value={4}>4 columns</option>
+              <option value={5}>5 columns</option><option value={6}>6 columns</option><option value={8}>8 columns</option>
+            </select>
+          </label>
+        </div>
+        <div className="population-board-grid" style={{ gridTemplateColumns: "repeat(" + populationColumns + ", minmax(0, 1fr))" }}>
           {Array.from({ length: config.populationSize }, (_, index) => {
             const candidate = populationViews[index];
-            return <div className="population-agent-card" key={index}>
+            return <button type="button" className={"population-agent-card " + (candidate?.finished ? "is-finished" : "")} key={index}
+              onClick={() => { setSelectedAgent({ generation: activeGeneration, index }); setReplayFrameIndex(0); setIsReplaying(false); }}>
               <div className="population-agent-heading"><strong>Agent {String(index + 1).padStart(2, "0")}</strong><span className={candidate?.error ? "candidate-failed" : candidate?.finished ? "candidate-ok" : "population-agent-running"}>{candidate?.error ? "FAILED" : candidate?.finished ? "DONE" : candidate?.view ? "PLAYING" : status === "running" ? "STARTING" : "WAITING"}</span></div>
               {candidate?.view ? <EnvironmentVisualization view={candidate.view} /> : <div className="population-board-placeholder">Waiting for first frame…</div>}
               {candidate?.finished && <div className="population-agent-fitness">Fitness <strong>{candidate.fitness?.toFixed(2) ?? "—"}</strong></div>}
-            </div>;
+              <span className="population-agent-open">{candidate?.finished ? "View · Replay available" : "View live agent"}</span>
+            </button>;
           })}
         </div>
+        {selectedAgent && (() => {
+          const key = selectedAgent.generation + "-" + selectedAgent.index;
+          const frames = populationReplays[key] ?? [];
+          const selectedCandidate = selectedAgent.generation === activeGeneration ? populationViews[selectedAgent.index] : undefined;
+          const replayView = frames[Math.min(replayFrameIndex, Math.max(0, frames.length - 1))];
+          const canReplay = Boolean(!selectedCandidate?.error && (selectedCandidate?.finished || events.some((item) => item.generation === selectedAgent.generation && item.candidateIndex === selectedAgent.index && !item.error)));
+          return <div className="agent-detail-backdrop" role="presentation" onClick={() => { setSelectedAgent(null); setIsReplaying(false); }}>
+            <section className="panel agent-detail-modal" role="dialog" aria-modal="true" aria-label="Agent details" onClick={(event) => event.stopPropagation()}>
+              <div className="panel-heading"><div><div className="panel-kicker">AGENT DETAIL</div><h2>Generation {selectedAgent.generation + 1} · Agent {selectedAgent.index + 1}</h2></div><button className="text-button" onClick={() => { setSelectedAgent(null); setIsReplaying(false); }}>Close ×</button></div>
+              <div className="agent-detail-board"><EnvironmentVisualization view={isReplaying ? replayView : (selectedCandidate?.view ?? replayView)} /></div>
+              <div className="agent-replay-controls">
+                <span>{frames.length ? "Frame " + Math.min(replayFrameIndex + 1, frames.length) + " / " + frames.length : "No frames captured"}</span>
+                <input aria-label="Replay position" type="range" min="0" max={Math.max(0, frames.length - 1)} value={Math.min(replayFrameIndex, Math.max(0, frames.length - 1))} disabled={!canReplay || frames.length < 2 || isReplaying} onChange={(event) => setReplayFrameIndex(Number(event.target.value))} />
+                <button className="primary-button" disabled={!canReplay || frames.length < 2} onClick={() => { setReplayFrameIndex(0); setIsReplaying((value) => !value); }}>{isReplaying ? "Pause replay" : "Replay"}</button>
+              </div>
+              {!canReplay && <p className="empty-logs">Replay becomes available after this agent finishes.</p>}
+            </section>
+          </div>;
+        })()}
       </section>
       <div className="training-results-grid">
         <section className="panel training-progress-panel">
@@ -640,6 +744,8 @@ function PlaygroundOverview({
   const [result, setResult] = useState<{ fitness: number; metrics?: Record<string, unknown> } | null>(null);
   const [logs, setLogs] = useState<Record<string, unknown>[]>([]);
   const [playbackDelay, setPlaybackDelay] = useState(80);
+  const [environmentMaxSteps, setEnvironmentMaxSteps] = useState(500);
+  const [environmentSeed, setEnvironmentSeed] = useState(42);
   const [renderedView, setRenderedView] = useState<unknown>(source === snakeEnvironmentSource ? {
     type: "snake", width: 12, height: 12,
     snake: [{ x: 6, y: 6, head: true }, { x: 5, y: 6 }, { x: 4, y: 6 }],
@@ -673,9 +779,9 @@ function PlaygroundOverview({
           sessionId: `playground-${Date.now()}`,
           generation: 0,
           candidateIndex: 0,
-          seed: 42,
+          seed: environmentSeed,
         },
-        config: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay },
+        config: { inputSize: activeNetwork.inputSize, outputSize, stepDelayMs: playbackDelay, maxSteps: environmentMaxSteps },
         timeoutMs: 30_000,
         signal: controller.signal,
         onReport: (metrics) => setLogs((current) => [...current, metrics]),
@@ -742,6 +848,12 @@ function PlaygroundOverview({
             <input id="playground-speed" type="range" min="0" max="500" step="10" disabled={status === "running"} value={playbackDelay} onChange={(event) => setPlaybackDelay(Number(event.target.value))} />
             <span>{playbackDelay === 0 ? "Fastest" : playbackDelay + " ms / step"}</span>
           </div>
+          <label className="environment-run-parameter">Max steps
+            <input type="number" min="1" max="10000" value={environmentMaxSteps} disabled={status === "running"} onChange={(event) => setEnvironmentMaxSteps(Math.max(1, event.target.valueAsNumber || 1))} />
+          </label>
+          <label className="environment-run-parameter">Environment seed
+            <input type="number" step="1" value={environmentSeed} disabled={status === "running"} onChange={(event) => setEnvironmentSeed(event.target.valueAsNumber || 0)} />
+          </label>
           <div className="selected-network-label">
             <BrainCircuit size={14} />
             <span>{network ? network.name : "A sample 2 → 2 MLP will be created on first run"}</span>

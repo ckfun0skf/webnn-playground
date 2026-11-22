@@ -76,6 +76,16 @@ async function runSession(message: StartMessage): Promise<void> {
       pendingFinishResolve = resolve;
     });
 
+    let stepCount = 0;
+    const configuredMaxSteps = Number(message.config.maxSteps);
+    const maxSteps = Number.isInteger(configuredMaxSteps) && configuredMaxSteps > 0
+      ? configuredMaxSteps
+      : Number.POSITIVE_INFINITY;
+    const stepDelay = () => new Promise<void>((resolve) => {
+      const delay = Math.max(0, Math.min(2000, Number(message.config.stepDelayMs) || 0));
+      setTimeout(resolve, delay);
+    });
+
     const context = {
       network: {
         async predict(input: readonly number[]): Promise<number[]> {
@@ -104,10 +114,12 @@ async function runSession(message: StartMessage): Promise<void> {
         if (message.renderEnabled) scope.postMessage({ type: "render", view });
       },
       random: createSeededRandom(message.session.seed),
-      yield: () => new Promise<void>((resolve) => {
-        const delay = Math.max(0, Math.min(2000, Number(message.config.stepDelayMs) || 0));
-        setTimeout(resolve, delay);
-      }),
+      step: async (): Promise<boolean> => {
+        stepCount += 1;
+        await stepDelay();
+        return stepCount < maxSteps;
+      },
+      yield: stepDelay,
       signal: controller.signal,
       session: Object.freeze({ ...message.session }),
       config: Object.freeze({ ...message.config }),

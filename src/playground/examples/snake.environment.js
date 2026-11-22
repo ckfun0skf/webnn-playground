@@ -1,6 +1,16 @@
+export const playgroundDefinition = {
+  id: "snake",
+  name: "Snake",
+  version: 1,
+  inputSize: 11,
+  outputSize: 3,
+  parameters: [
+    { key: "maxSteps", label: "Maximum steps", type: "number", default: 500, min: 1, max: 10000, step: 100, description: "Hard limit for one Snake session." },
+  ],
+};
+
 const WIDTH = 12;
 const HEIGHT = 12;
-const MAX_STEPS = 500;
 const DIRECTIONS = [
   { x: 0, y: -1 },
   { x: 1, y: 0 },
@@ -63,27 +73,14 @@ function argmax(values) {
 
 function render(ctx, snake, food, score, steps, direction, terminal) {
   ctx.render({
-    type: "snake",
-    width: WIDTH,
-    height: HEIGHT,
-    snake: snake.map((segment, index) => ({
-      ...segment,
-      head: index === 0,
-    })),
-    food,
-    score,
-    steps,
-    direction,
-    terminal,
+    type: "snake", width: WIDTH, height: HEIGHT,
+    snake: snake.map((segment, index) => ({ ...segment, head: index === 0 })),
+    food, score, steps, direction, terminal,
   });
 }
 
 export async function sessionStart(ctx) {
-  let snake = [
-    { x: 6, y: 6 },
-    { x: 5, y: 6 },
-    { x: 4, y: 6 },
-  ];
+  let snake = [{ x: 6, y: 6 }, { x: 5, y: 6 }, { x: 4, y: 6 }];
   let direction = 1;
   let food = randomFood(ctx, snake);
   let score = 0;
@@ -92,21 +89,14 @@ export async function sessionStart(ctx) {
 
   render(ctx, snake, food, score, steps, direction, terminal);
 
-  while (!terminal && steps < MAX_STEPS && !ctx.signal.aborted) {
-    const observation = observe(snake, direction, food);
-    const actionValues = await ctx.network.predict(observation);
+  while (!terminal && !ctx.signal.aborted) {
+    const actionValues = await ctx.network.predict(observe(snake, direction, food));
     direction = nextDirection(direction, argmax(actionValues));
-
     const vector = DIRECTIONS[direction];
-    const nextHead = {
-      x: snake[0].x + vector.x,
-      y: snake[0].y + vector.y,
-    };
+    const nextHead = { x: snake[0].x + vector.x, y: snake[0].y + vector.y };
     const eating = sameCell(nextHead, food);
     const bodyToCheck = eating ? snake : snake.slice(0, -1);
-    const hitWall =
-      nextHead.x < 0 || nextHead.x >= WIDTH ||
-      nextHead.y < 0 || nextHead.y >= HEIGHT;
+    const hitWall = nextHead.x < 0 || nextHead.x >= WIDTH || nextHead.y < 0 || nextHead.y >= HEIGHT;
     const hitBody = bodyToCheck.some((segment) => sameCell(segment, nextHead));
 
     steps += 1;
@@ -125,18 +115,10 @@ export async function sessionStart(ctx) {
 
     ctx.report({ score, steps, terminal });
     render(ctx, snake, food, score, steps, direction, terminal);
-    await ctx.yield();
+    if (terminal || !(await ctx.step())) break;
   }
 
   if (ctx.signal.aborted) return;
-
-  const fitness = score * 100 + steps * 0.1;
-  await ctx.finish({
-    fitness,
-    metrics: { score, steps, terminal },
-  });
-}
-
-export async function sessionEnd(ctx, result) {
-  // No external resources need cleanup for this environment.
+  // Fitness is exactly the number of apples eaten. Survival time never adds points.
+  await ctx.finish({ fitness: score, metrics: { score, steps, terminal } });
 }
