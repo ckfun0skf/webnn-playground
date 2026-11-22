@@ -439,3 +439,7 @@ h1 { margin: 0; font-size: 25px; font-weight: 600; letter-spacing: -.7px; }
 .resource-library .saved-network-copy span { overflow-wrap: anywhere; }
 @media (max-width: 850px) { .resource-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 520px) { .resource-form-grid { grid-template-columns: 1fr; } }
+
+.resource-parameters-label { display: grid; gap: 6px; margin: 0 0 14px; color: #aeb5c1; font-size: 10px; }
+.resource-parameters-label textarea { width: 100%; resize: vertical; padding: 9px; color: #d0d6e0; background: #11161d; border: 1px solid #343d49; border-radius: 5px; font: 10px/1.5 var(--mono); }
+.training-config-grid input[type="checkbox"] { justify-self: start; accent-color: #9385df; }
