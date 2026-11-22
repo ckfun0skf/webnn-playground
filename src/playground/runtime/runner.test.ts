@@ -8,6 +8,7 @@ type FakeStartMessage = {
   network: ReturnType<typeof createMLP>;
   session: { sessionId: string; generation: number; candidateIndex: number; seed: number };
   config: Record<string, unknown>;
+  renderEnabled: boolean;
 };
 
 class FakeWorker {
@@ -83,6 +84,29 @@ describe("runPlaygroundSession", () => {
     expect(worker?.terminated).toBe(true);
     expect(reports).toEqual([{ step: 1 }]);
     expect(frames).toEqual([{ type: "grid", cells: [0, 1, 0] }]);
+  });
+
+  it("disables Worker render messages when no render callback is registered", async () => {
+    let worker: FakeWorker | undefined;
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        worker = this;
+      }
+    });
+    const network = createMLP({
+      inputSize: 2,
+      layers: [{ units: 1 }],
+      random: () => 0.5,
+    });
+
+    await runPlaygroundSession({
+      source: "export async function sessionStart(ctx) {}",
+      network,
+      session: { sessionId: "no-render", generation: 0, candidateIndex: 0, seed: 1 },
+    });
+
+    expect(worker?.startMessage?.renderEnabled).toBe(false);
   });
 
   it("does not impose a default wall-clock timeout", async () => {

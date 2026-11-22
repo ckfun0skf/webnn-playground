@@ -136,14 +136,17 @@ async function runSession(message: StartMessage): Promise<void> {
     });
 
     let stepCount = 0;
+    let lastRenderAt = Number.NEGATIVE_INFINITY;
     const configuredMaxSteps = Number(message.config.maxSteps);
     const maxSteps = Number.isInteger(configuredMaxSteps) && configuredMaxSteps > 0
       ? configuredMaxSteps
       : Number.POSITIVE_INFINITY;
-    const stepDelay = () => new Promise<void>((resolve) => {
+    const stepDelay = (): Promise<void> => {
       const delay = Math.max(0, Math.min(2000, Number(message.config.stepDelayMs) || 0));
-      setTimeout(resolve, delay);
-    });
+      return delay === 0
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => setTimeout(resolve, delay));
+    };
 
     const context = {
       network: {
@@ -170,7 +173,12 @@ async function runSession(message: StartMessage): Promise<void> {
         if (message.reportEnabled) scope.postMessage({ type: "report", metrics });
       },
       render(view: unknown): void {
-        if (message.renderEnabled) scope.postMessage({ type: "render", view });
+        if (!message.renderEnabled) return;
+        const intervalMs = Math.max(0, Number(message.config.renderIntervalMs) || 0);
+        const now = performance.now();
+        if (now - lastRenderAt < intervalMs) return;
+        lastRenderAt = now;
+        scope.postMessage({ type: "render", view });
       },
       random: createSeededRandom(message.session.seed),
       step: async (): Promise<boolean> => {
