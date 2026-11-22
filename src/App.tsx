@@ -760,6 +760,7 @@ function PlaygroundOverview({
   const [loadPlaygroundId, setLoadPlaygroundId] = useState("");
   const [savePlaygroundMessage, setSavePlaygroundMessage] = useState<string | null>(null);
   const [savePlaygroundError, setSavePlaygroundError] = useState<string | null>(null);
+  const [playgroundParametersJson, setPlaygroundParametersJson] = useState("[]");
   useEffect(() => {
     let active = true;
     listSavedPlaygrounds().then((items) => {
@@ -769,6 +770,9 @@ function PlaygroundOverview({
     }).catch((e) => setSavePlaygroundError(e instanceof Error ? e.message : String(e)));
     return () => { active = false; };
   }, [resourceRevision]);
+  useEffect(() => {
+    if (source.includes('id: "snake"')) { setPlaygroundName("Snake"); setPlaygroundId("snake"); setPlaygroundInputSize(11); setPlaygroundOutputSize(3); }
+  }, [source]);
   const saveCurrentPlayground = async () => {
     try {
       if (!source.trim()) throw new Error("Environment JavaScript cannot be empty.");
@@ -777,17 +781,13 @@ function PlaygroundOverview({
       if (!Number.isInteger(playgroundInputSize) || playgroundInputSize < 1 || !Number.isInteger(playgroundOutputSize) || playgroundOutputSize < 1) throw new Error("Input/output dimensions must be positive integers.");
       const stringValue = (key: string, fallback: string) => source.match(new RegExp(key + "\\s*:\\s*[\"']([^\"']+)[\"']"))?.[1] ?? fallback;
       const numberValue = (key: string, fallback: number) => Number(source.match(new RegExp(key + "\\s*:\\s*(\\d+)"))?.[1] ?? fallback);
-      const parameters: PlaygroundDefinition["parameters"] = [];
+      const parameters = JSON.parse(playgroundParametersJson) as PlaygroundDefinition["parameters"];
+      if (!Array.isArray(parameters) || parameters.some((item) => !item || typeof item.key !== "string" || typeof item.label !== "string" || !["number", "boolean", "string"].includes(item.type) || !["number", "boolean", "string"].includes(typeof item.default))) throw new Error("Parameters must be a JSON array of typed parameter definitions.");
       const definition: PlaygroundDefinition = {
         id: playgroundId.trim(), name: playgroundName.trim(),
         version: numberValue("version", 1),
         inputSize: playgroundInputSize, outputSize: playgroundOutputSize, parameters,
       };
-      // Preserve a definition's explicitly declared parameter defaults when source uses a simple literal array.
-      const parameterMatch = source.match(/parameters\\s*:\\s*(\\[[\\s\\S]*?\\])\\s*,?\\s*}/);
-      if (parameterMatch) {
-        try { definition.parameters = JSON.parse(parameterMatch[1]); } catch { /* author can define parameters later in Resource Library */ }
-      }
       await savePlayground(definition, source, playgroundName.trim());
       const items = await listSavedPlaygrounds();
       setSavedPlaygrounds(items);
@@ -891,7 +891,8 @@ function PlaygroundOverview({
             }}>Load Snake</button>
           </div>
         </div>
-        <div className="playground-resource-controls">\n          <label>Playground name<input value={playgroundName} onChange={(e) => setPlaygroundName(e.target.value)} /></label>\n          <label>Stable ID<input value={playgroundId} onChange={(e) => setPlaygroundId(e.target.value)} /></label>\n          <label>Input size<input type="number" min="1" value={playgroundInputSize} onChange={(e) => setPlaygroundInputSize(e.target.valueAsNumber)} /></label>\n          <label>Output size<input type="number" min="1" value={playgroundOutputSize} onChange={(e) => setPlaygroundOutputSize(e.target.valueAsNumber)} /></label>\n          <button className="primary-button" onClick={() => void saveCurrentPlayground()}><Save size={14} /> Save Playground</button>\n          <label>Saved Playground<select value={loadPlaygroundId} onChange={(e) => setLoadPlaygroundId(e.target.value)}><option value="">Select saved Playground…</option>{savedPlaygrounds.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.definition.inputSize}→{item.definition.outputSize}</option>)}</select></label>\n          <button className="secondary-button" onClick={loadSavedPlayground} disabled={!savedPlaygrounds.some((item) => item.id === loadPlaygroundId)}>Load selected</button>\n          {savePlaygroundMessage && <span className="save-message">{savePlaygroundMessage}</span>}\n          {savePlaygroundError && <span className="environment-error">{savePlaygroundError}</span>}\n        </div>\n        <div className="environment-editor-meta">
+        <div className="playground-resource-controls">\n          <label>Playground name<input value={playgroundName} onChange={(e) => setPlaygroundName(e.target.value)} /></label>\n          <label>Stable ID<input value={playgroundId} onChange={(e) => setPlaygroundId(e.target.value)} /></label>\n          <label>Input size<input type="number" min="1" value={playgroundInputSize} onChange={(e) => setPlaygroundInputSize(e.target.valueAsNumber)} /></label>\n          <label>Output size<input type="number" min="1" value={playgroundOutputSize} onChange={(e) => setPlaygroundOutputSize(e.target.valueAsNumber)} /></label>\n          <label className="playground-parameters-field">Environment parameters (JSON)<textarea rows={3} value={playgroundParametersJson} onChange={(e) => setPlaygroundParametersJson(e.target.value)} spellCheck={false} /></label>
+          <button className="primary-button" onClick={() => void saveCurrentPlayground()}><Save size={14} /> Save Playground</button>\n          <label>Saved Playground<select value={loadPlaygroundId} onChange={(e) => setLoadPlaygroundId(e.target.value)}><option value="">Select saved Playground…</option>{savedPlaygrounds.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.definition.inputSize}→{item.definition.outputSize}</option>)}</select></label>\n          <button className="secondary-button" onClick={loadSavedPlayground} disabled={!savedPlaygrounds.some((item) => item.id === loadPlaygroundId)}>Load selected</button>\n          {savePlaygroundMessage && <span className="save-message">{savePlaygroundMessage}</span>}\n          {savePlaygroundError && <span className="environment-error">{savePlaygroundError}</span>}\n        </div>\n        <div className="environment-editor-meta">
           <span>Exports <code>sessionStart(ctx)</code> and optional <code>sessionEnd(ctx, result)</code></span>
           <span>{source.split("\n").length} lines</span>
         </div>
